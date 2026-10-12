@@ -889,7 +889,7 @@ class MainActivity : AppCompatActivity() {
         // Terminal commands never inherit a pending GUI Operation Center
         // request (for example after a rejected GUI action with no USB).
         autoShowGuiOperation = false
-        etCommand.text.clear()
+        etCommand.text?.clear()
         addToHistory(raw)
 
         val rawLower = raw.lowercase(Locale.US)
@@ -1601,7 +1601,7 @@ class MainActivity : AppCompatActivity() {
         if (commandHistory.isEmpty()) return
         historyIndex = (historyIndex + direction).coerceIn(0, commandHistory.size)
         etCommand.setText(if (historyIndex == commandHistory.size) "" else commandHistory[historyIndex])
-        etCommand.setSelection(etCommand.text.length)
+        etCommand.setSelection(etCommand.text?.length ?: 0)
     }
 
     // ─── РАЗРЕШЕНИЯ И ФАЙЛЫ ──────────────────────────────────────────────────
