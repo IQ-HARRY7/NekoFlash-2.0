@@ -511,4 +511,5 @@ Unlock</string>
     <string name="rev13_image_source_workspace">NekoFlash workspace · local image</string>
     <string name="rev15_shell_not_open">Interactive ADB shell is not open.</string>
     <string name="rev15_shell_already_closed">Interactive ADB shell is already closed.</string>
+    <string name="rev16_sparse_option_not_implemented">Automatic Fastboot sparse splitting (-S) is not implemented yet. The command was not sent. Use a compatible pre-split sparse image/chunk set.</string>
 </resources>

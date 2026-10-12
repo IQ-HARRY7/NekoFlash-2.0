@@ -55,10 +55,13 @@ assert 'private val folderName = "NekoFlash"' in main
 
 # Release tags must pass the same source and JVM gates before signing/publishing.
 release = (root/'.github/workflows/release.yml').read_text()
-release_gate = (
-    'python3 tests/check_rev15.py'
-    if 'python3 tests/check_rev15.py' in release
-    else 'python3 tests/check_rev14.py'
+release_gate = next(
+    gate for gate in (
+        'python3 tests/check_rev16.py',
+        'python3 tests/check_rev15.py',
+        'python3 tests/check_rev14.py',
+    )
+    if gate in release
 )
 assert release_gate in release
 assert 'python3 tests/check_i18n.py' in release
@@ -69,7 +72,9 @@ assert release.index(':app:testDebugUnitTest') < release.index('Build signed Rel
 # Protocol/safety limits remain transport-owned, not removed as "artificial".
 fastboot = (jvm/'FastbootProtocol.kt').read_text()
 assert 'cmdBytes.size > 64' in fastboot
-assert 'imageSize > 0xFFFF_FFFFL' in fastboot
+size_policy = (jvm/'FastbootDownloadSizePolicy.kt').read_text()
+assert 'WIRE_MAX_BYTES: Long = 0xFFFF_FFFFL' in size_policy
+assert 'FastbootDownloadSizePolicy.validate(' in fastboot
 assert 'markSessionBroken' in fastboot and 'NativeUsbfsBackend' in fastboot
 
 print('PASS REV14: full-audit cleanup, clean Welcome, no silent queue caps, hardened release CI')

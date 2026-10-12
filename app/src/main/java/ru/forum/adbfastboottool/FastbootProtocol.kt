@@ -950,15 +950,25 @@ class FastbootProtocol(
             onLog("❌ ERROR: $message")
             return@withLock FlashResult.fail(FlashStage.VALIDATION, FlashFailureKind.VALIDATION, message)
         }
-        if (imageSize <= 0L) {
-            val message = "File is empty: $displayName"
+        val sizeRejection = FastbootDownloadSizePolicy.validate(
+            imageSize,
+            effectiveMaxDownloadSizeBytes()
+        )
+        if (sizeRejection != null) {
+            val message = when (sizeRejection.reason) {
+                FastbootDownloadSizePolicy.Reason.EMPTY ->
+                    "File is empty: $displayName"
+                FastbootDownloadSizePolicy.Reason.WIRE_LIMIT ->
+                    "Fastboot download:%08x cannot encode this image size: $imageSize bytes"
+                FastbootDownloadSizePolicy.Reason.DEVICE_LIMIT ->
+                    "Image size $imageSize exceeds device max-download-size ${sizeRejection.maxBytes}"
+            }
             onLog("❌ ERROR: $message")
-            return@withLock FlashResult.fail(FlashStage.VALIDATION, FlashFailureKind.VALIDATION, message)
-        }
-        if (imageSize > 0xFFFF_FFFFL) {
-            val message = "Fastboot 32-bit download cannot represent this image size"
-            onLog("❌ ERROR: $message")
-            return@withLock FlashResult.fail(FlashStage.VALIDATION, FlashFailureKind.VALIDATION, message)
+            return@withLock FlashResult.fail(
+                FlashStage.VALIDATION,
+                FlashFailureKind.VALIDATION,
+                message
+            )
         }
 
         val fileSizeMb = imageSize.toDouble() / 1024.0 / 1024.0
@@ -1176,12 +1186,20 @@ class FastbootProtocol(
             onLog("❌ ERROR: file is unavailable: ${file.name}")
             return false
         }
-        if (file.length() <= 0L) {
-            onLog("❌ ERROR: file is empty: ${file.name}")
-            return false
-        }
-        if (file.length() > 0xFFFF_FFFFL) {
-            onLog("❌ ERROR: Fastboot download supports sizes up to 4 GiB in this implementation")
+        val sizeRejection = FastbootDownloadSizePolicy.validate(
+            file.length(),
+            effectiveMaxDownloadSizeBytes()
+        )
+        if (sizeRejection != null) {
+            val message = when (sizeRejection.reason) {
+                FastbootDownloadSizePolicy.Reason.EMPTY ->
+                    "file is empty: ${file.name}"
+                FastbootDownloadSizePolicy.Reason.WIRE_LIMIT ->
+                    "download:%08x cannot encode ${file.length()} bytes"
+                FastbootDownloadSizePolicy.Reason.DEVICE_LIMIT ->
+                    "file size ${file.length()} exceeds device max-download-size ${sizeRejection.maxBytes}"
+            }
+            onLog("❌ ERROR: $message")
             return false
         }
 
@@ -2428,6 +2446,12 @@ class FastbootProtocol(
     private fun parseFastbootDataSize(raw: String?): Long? {
         val token = raw?.trim()?.takeIf { it.isNotBlank() } ?: return null
         return try { token.toLong(16) } catch (_: NumberFormatException) { parseFastbootSize(token) }
+    }
+
+    private fun effectiveMaxDownloadSizeBytes(): Long? {
+        cachedDiagnostics?.maxDownloadSizeBytes?.takeIf { it > 0L }?.let { return it }
+        if (sessionState != SessionState.IDLE) return null
+        return parseFastbootSize(getVar("max-download-size"))?.takeIf { it > 0L }
     }
 
     private fun parseFastbootSize(raw: String?): Long? {

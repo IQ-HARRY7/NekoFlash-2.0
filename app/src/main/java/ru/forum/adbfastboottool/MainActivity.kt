@@ -1126,10 +1126,12 @@ class MainActivity : AppCompatActivity() {
                 }
                 token == "-S" || lower == "--sparse-limit" -> {
                     nextOptionValue(token) ?: return null
-                    viewModel.log("ℹ️ Sparse splitting (-S) is not required: NekoFlash sends the selected image directly.")
+                    viewModel.log(getString(R.string.rev16_sparse_option_not_implemented))
+                    return null
                 }
                 token.startsWith("-S") && token.length > 2 -> {
-                    viewModel.log("ℹ️ Sparse splitting (-S) is not required: NekoFlash sends the selected image directly.")
+                    viewModel.log(getString(R.string.rev16_sparse_option_not_implemented))
+                    return null
                 }
                 lower == "-s" -> {
                     nextOptionValue("-s") ?: return null

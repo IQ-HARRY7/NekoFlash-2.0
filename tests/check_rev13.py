@@ -22,7 +22,7 @@ def git_blob(path):
     data = path.read_bytes()
     return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
 
-assert git_blob(fastboot_file) == '26482dcb1a8876ddfa42455981a9a5ebaf32791d'
+assert git_blob(fastboot_file) == '69d9a2561d9a1cc549afc23987b04129ad5eb3f5'
 assert git_blob(native_file) == '886b274e20e6e356bc806250314914a9c2c24de0'
 assert git_blob(backend_file) == '5bb8a48827800dd8ea1fc601194b3566b7da91c6'
 
