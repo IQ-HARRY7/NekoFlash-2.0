@@ -223,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         // Never trust exported Intent extras as an onboarding bypass. This
         // check also covers ACTION_USB_DEVICE_ATTACHED, activity recreation,
         // and a storage permission revoked after onboarding.
-        if (!OnboardingGate.canEnterMain(this)) {
+        if (!OnboardingGate.canEnterMain()) {
             redirectToWelcome(intent)
             return
         }
@@ -426,7 +426,7 @@ class MainActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (!OnboardingGate.canEnterMain(this)) {
+        if (!OnboardingGate.canEnterMain()) {
             redirectToWelcome(intent)
             return
         }
@@ -1904,7 +1904,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (!OnboardingGate.canEnterMain(this)) {
+        if (!OnboardingGate.canEnterMain()) {
             redirectToWelcome(intent)
             return
         }
@@ -4319,7 +4319,7 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
-    private val PARTITION_NAME_PATTERN = Regex("^[a-z0-9._-]{1,64}$")
+    private val PARTITION_NAME_PATTERN = Regex("^[A-Za-z0-9._:-]+$")
 
     companion object {
         private const val USB_PERMISSION_TIMEOUT_MS = 30_000L
