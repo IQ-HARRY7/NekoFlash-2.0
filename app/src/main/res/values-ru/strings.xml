@@ -513,4 +513,6 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev13_image_source_title">Источник образа</string>
     <string name="rev13_image_source_android">Файлы Android · прямой SAF</string>
     <string name="rev13_image_source_workspace">Рабочая папка NekoFlash · локальный образ</string>
+    <string name="rev15_shell_not_open">Интерактивный ADB shell не открыт.</string>
+    <string name="rev15_shell_already_closed">Интерактивный ADB shell уже закрыт.</string>
 </resources>

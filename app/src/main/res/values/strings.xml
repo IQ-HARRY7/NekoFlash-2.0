@@ -509,4 +509,6 @@ Unlock</string>
     <string name="rev13_image_source_title">Choose image source</string>
     <string name="rev13_image_source_android">Android files · direct SAF</string>
     <string name="rev13_image_source_workspace">NekoFlash workspace · local image</string>
+    <string name="rev15_shell_not_open">Interactive ADB shell is not open.</string>
+    <string name="rev15_shell_already_closed">Interactive ADB shell is already closed.</string>
 </resources>

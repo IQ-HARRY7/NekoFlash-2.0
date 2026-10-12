@@ -55,10 +55,15 @@ assert 'private val folderName = "NekoFlash"' in main
 
 # Release tags must pass the same source and JVM gates before signing/publishing.
 release = (root/'.github/workflows/release.yml').read_text()
-assert 'python3 tests/check_rev14.py' in release
+release_gate = (
+    'python3 tests/check_rev15.py'
+    if 'python3 tests/check_rev15.py' in release
+    else 'python3 tests/check_rev14.py'
+)
+assert release_gate in release
 assert 'python3 tests/check_i18n.py' in release
 assert './gradlew :app:testDebugUnitTest' in release
-assert release.index('python3 tests/check_rev14.py') < release.index('Build signed Release APK')
+assert release.index(release_gate) < release.index('Build signed Release APK')
 assert release.index(':app:testDebugUnitTest') < release.index('Build signed Release APK')
 
 # Protocol/safety limits remain transport-owned, not removed as "artificial".

@@ -133,5 +133,9 @@ for key in rev13_keys:
     assert key in en and key in ru
     assert "R.string." + key in (main + vm), key
 
+for key in ("rev15_shell_not_open", "rev15_shell_already_closed"):
+    assert key in en and key in ru
+    assert "R.string." + key in vm
+
 print(f"PASS I18N: {len(en)} paired strings, {len(plural_en)} plural keys, "
       "format-safe RU/EN, package and workspace paths unchanged")

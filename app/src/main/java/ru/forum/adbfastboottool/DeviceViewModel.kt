@@ -1143,12 +1143,22 @@ class DeviceViewModel(
 
     fun isInteractiveAdbShellActive(): Boolean = adbProtocol?.hasInteractiveShell == true
 
+    fun sendInteractiveAdbShellBytes(payload: ByteArray): Boolean {
+        val proto = adbProtocol
+        return if (proto?.isConnected == true && proto.hasInteractiveShell) {
+            proto.sendInteractiveShellBytes(payload)
+        } else {
+            log(text(R.string.rev15_shell_not_open))
+            false
+        }
+    }
+
     fun sendInteractiveAdbShellInput(line: String) {
         val proto = adbProtocol
         if (proto?.isConnected == true && proto.hasInteractiveShell) {
             proto.sendInteractiveShellInput(line)
         } else {
-            log("❌ Interactive adb shell is not open")
+            log(text(R.string.rev15_shell_not_open))
         }
     }
 
@@ -1157,7 +1167,7 @@ class DeviceViewModel(
         if (proto?.isConnected == true && proto.hasInteractiveShell) {
             proto.sendInteractiveShellInterrupt()
         } else {
-            log("❌ Interactive adb shell is not open")
+            log(text(R.string.rev15_shell_not_open))
         }
     }
 
@@ -1166,7 +1176,7 @@ class DeviceViewModel(
         if (proto?.isConnected == true && proto.hasInteractiveShell) {
             proto.sendInteractiveShellEof()
         } else {
-            log("❌ Interactive adb shell is not open")
+            log(text(R.string.rev15_shell_not_open))
         }
     }
 
@@ -1175,7 +1185,7 @@ class DeviceViewModel(
         if (proto?.isConnected == true && proto.hasInteractiveShell) {
             proto.stopInteractiveShell()
         } else {
-            log("ℹ️ Interactive adb shell is already closed")
+            log(text(R.string.rev15_shell_already_closed))
         }
     }
 

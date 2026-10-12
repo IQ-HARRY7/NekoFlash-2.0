@@ -78,7 +78,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var usbManager: UsbManager
     private lateinit var rvConsoleOutput: RecyclerView
     private lateinit var consoleLogAdapter: ConsoleLogAdapter
-    private lateinit var etCommand: EditText
+    private lateinit var etCommand: PtyInputEditText
     private lateinit var consoleDockController: ConsoleDockController
     private lateinit var tvStatus: TextView
     private var tvOtgStatus: TextView? = null
@@ -242,6 +242,10 @@ class MainActivity : AppCompatActivity() {
             itemAnimator = null
         }
         etCommand = findViewById(R.id.etCommand)
+        etCommand.configurePty(
+            rawMode = { ::viewModel.isInitialized && viewModel.isInteractiveAdbShellActive() },
+            sink = { bytes -> viewModel.sendInteractiveAdbShellBytes(bytes) }
+        )
         consoleDockController = ConsoleDockController(this, rvConsoleOutput).also { it.initialize() }
         findViewById<View>(R.id.btnConsoleLogs).setOnClickListener { showLogsMenu() }
         tvStatus = findViewById(R.id.tvStatus)
@@ -518,13 +522,31 @@ class MainActivity : AppCompatActivity() {
             requestOperationCancelFromUi()
         }
 
-        findViewById<Button>(R.id.btnHistoryUp).setOnClickListener { navigateHistory(-1) }
-        findViewById<Button>(R.id.btnHistoryDown).setOnClickListener { navigateHistory(1) }
+        findViewById<Button>(R.id.btnHistoryUp).setOnClickListener {
+            if (viewModel.isInteractiveAdbShellActive()) {
+                viewModel.sendInteractiveAdbShellBytes("\u001B[A".toByteArray())
+            } else navigateHistory(-1)
+        }
+        findViewById<Button>(R.id.btnHistoryDown).setOnClickListener {
+            if (viewModel.isInteractiveAdbShellActive()) {
+                viewModel.sendInteractiveAdbShellBytes("\u001B[B".toByteArray())
+            } else navigateHistory(1)
+        }
 
-        findViewById<Button>(R.id.btnSend).setOnClickListener { handleCommandInput() }
+        findViewById<Button>(R.id.btnSend).setOnClickListener {
+            if (viewModel.isInteractiveAdbShellActive()) {
+                viewModel.sendInteractiveAdbShellBytes(byteArrayOf('\n'.code.toByte()))
+            } else {
+                handleCommandInput()
+            }
+        }
         etCommand.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_SEND || actionId == EditorInfo.IME_ACTION_DONE) {
-                handleCommandInput()
+                if (viewModel.isInteractiveAdbShellActive()) {
+                    viewModel.sendInteractiveAdbShellBytes(byteArrayOf('\n'.code.toByte()))
+                } else {
+                    handleCommandInput()
+                }
                 true
             } else {
                 false

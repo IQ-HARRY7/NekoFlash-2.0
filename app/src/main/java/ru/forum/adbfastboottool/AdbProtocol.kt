@@ -1404,9 +1404,12 @@ class AdbProtocol(
         return runShellCommandForResult(cleanCommand, logOutput = true, forceLegacy = forceLegacy).success
     }
 
+    fun sendInteractiveShellBytes(payload: ByteArray): Boolean =
+        if (payload.isEmpty()) true else queueInteractiveShellBytes(payload)
+
     fun sendInteractiveShellInput(line: String): Boolean {
         val payload = (line + "\n").toByteArray(Charsets.UTF_8)
-        val accepted = queueInteractiveShellBytes(payload)
+        val accepted = sendInteractiveShellBytes(payload)
         if (accepted) onLog("adb-shell$ ${line.trimEnd()}")
         return accepted
     }
