@@ -22,10 +22,11 @@ def git_blob(path):
     data = path.read_bytes()
     return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
 
-assert git_blob(fastboot_file) == '69d9a2561d9a1cc549afc23987b04129ad5eb3f5'
+assert git_blob(fastboot_file) == '4dfc6b90a5fef8f2dbfafa6e39892b9573278512'
 assert git_blob(native_file) == '886b274e20e6e356bc806250314914a9c2c24de0'
 assert git_blob(backend_file) == '5bb8a48827800dd8ea1fc601194b3566b7da91c6'
 
+# FastbootProtocol was re-audited for REV17 DATA ACK size enforcement.
 # File APIs remain valid for terminal, Mass Flash and Mi Unlock.
 assert 'fun flashPartitionDetailed(partition: String, file: File): FlashResult' in fastboot
 assert 'flashPartitionDetailedInternal(partition, file, file.name, file.length(), null)' in fastboot
