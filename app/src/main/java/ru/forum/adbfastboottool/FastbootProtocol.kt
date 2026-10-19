@@ -918,6 +918,23 @@ class FastbootProtocol(
         }
     }
 
+    /** Never enter DATA_OUT unless the bootloader acknowledges the exact payload size. */
+    private fun verifyDownloadDataReply(replyHex: String, expectedBytes: Long): Boolean {
+        return when (val verdict = FastbootDataReplyPolicy.validate(replyHex, expectedBytes)) {
+            is FastbootDataReplyPolicy.Verdict.Accepted -> true
+            is FastbootDataReplyPolicy.Verdict.Invalid -> {
+                markSessionBroken("Invalid Fastboot DATA acknowledgement: '$replyHex'")
+                false
+            }
+            is FastbootDataReplyPolicy.Verdict.Mismatch -> {
+                markSessionBroken(
+                    "Fastboot DATA size mismatch: requested=${verdict.expected}, bootloader=${verdict.actual}"
+                )
+                false
+            }
+        }
+    }
+
     private fun flashPartitionDetailedInternal(
         partition: String,
         file: File?,
@@ -982,7 +999,16 @@ class FastbootProtocol(
         val downloadPacket = readUntilDataOrFinal(10000)
             ?: return@withLock flashTransportFailure(FlashStage.WAIT_DATA, "No valid response to download")
         when (downloadPacket.type) {
-            "DATA" -> onLog("Bootloader is ready to receive the image: ${downloadPacket.payload}")
+            "DATA" -> {
+                if (!verifyDownloadDataReply(downloadPacket.payload, imageSize)) {
+                    return@withLock FlashResult.fail(
+                        FlashStage.WAIT_DATA, FlashFailureKind.PROTOCOL,
+                        "Fastboot DATA reply did not match the requested payload size",
+                        sessionCorrupted = true
+                    )
+                }
+                onLog("Bootloader is ready to receive the image: ${downloadPacket.payload}")
+            }
             "FAIL" -> {
                 val message = downloadPacket.payload.ifBlank { downloadPacket.raw }
                 logFastbootFailure("Bootloader rejected download", message)
@@ -1214,7 +1240,10 @@ class FastbootProtocol(
 
         val downloadPacket = readUntilDataOrFinal(10000) ?: return false
         when (downloadPacket.type) {
-            "DATA" -> onLog("Bootloader is ready to receive the file: ${downloadPacket.payload}")
+            "DATA" -> {
+                if (!verifyDownloadDataReply(downloadPacket.payload, file.length())) return false
+                onLog("Bootloader is ready to receive the file: ${downloadPacket.payload}")
+            }
             "FAIL" -> { logFastbootFailure("Bootloader rejected download", downloadPacket.payload); return false }
             else   -> { onLog("ERROR: expected DATA, got ${downloadPacket.raw}"); return false }
         }
@@ -1267,15 +1296,27 @@ class FastbootProtocol(
             return false
         }
 
-        onLog("🔓 Staging unlock data (${encryptDataFile.length()} bytes)...")
-        val hexSize = String.format("%08x", encryptDataFile.length())
+        val unlockBytes = encryptDataFile.length()
+        val sizeRejection = FastbootDownloadSizePolicy.validate(
+            unlockBytes, effectiveMaxDownloadSizeBytes()
+        )
+        if (sizeRejection != null) {
+            onLog("❌ ERROR: unlock data size rejected before Fastboot download: ${sizeRejection.reason} (${unlockBytes} bytes)")
+            return false
+        }
+
+        onLog("🔓 Staging unlock data ($unlockBytes bytes)...")
+        val hexSize = String.format("%08x", unlockBytes)
         if (!writeCommand("download:$hexSize", 5000)) {
             onLog("❌ ERROR: download command failed for unlock")
             return false
         }
         val downloadPacket = readUntilDataOrFinal(10000) ?: return false
         when (downloadPacket.type) {
-            "DATA" -> onLog("Bootloader is ready to receive unlock data")
+            "DATA" -> {
+                if (!verifyDownloadDataReply(downloadPacket.payload, unlockBytes)) return false
+                onLog("Bootloader is ready to receive unlock data")
+            }
             "FAIL" -> { logFastbootFailure("Bootloader rejected download", downloadPacket.payload); return false }
             else   -> { onLog("❌ ERROR: expected DATA, got ${downloadPacket.raw}"); return false }
         }
