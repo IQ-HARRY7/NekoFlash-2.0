@@ -1,4 +1,14 @@
-# Changelog
+<div align="center">
+
+<img src="docs/artwork/nekoflash_launcher_circle_cat_v6.0.0.png" width="160" height="160" style="display: block; margin: 0 auto;" alt="NekoFlash Logo" />
+
+# NekoFlash Changelog
+
+### Release-level changes and version history
+
+English
+
+</div>
 
 Release-level changes only. Commit-by-commit development notes, temporary plans and maintainer workflow history belong in Git history.
 

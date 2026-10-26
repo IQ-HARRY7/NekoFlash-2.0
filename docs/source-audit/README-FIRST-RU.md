@@ -1,3 +1,37 @@
+<div align="center">
+
+<img src="../artwork/nekoflash_launcher_circle_cat_v6.0.0.png" width="160" height="160" style="display: block; margin: 0 auto;" alt="NekoFlash Logo" />
+
+# NekoFlash 2.0 REV5 — Getting Started & Continuation Point
+
+### Baseline verification, local test instructions, and next steps
+
+English&nbsp;&nbsp;|&nbsp;&nbsp;[Русский](#русская-версия--russian-version)
+
+</div>
+
+## Overview
+
+**Baseline:** ORIGINAL `NekoFlash-main-legacy.zip` (SHA256 recorded in `LEGACY-SOURCE-SHA256.json`). NOT NekoFlash Pro.
+
+**Design Consensus:** REV2 (general screens), REV3 **Sideload — APPROVED**, REV4 **Unlock — APPROVED**. None of the agreed screens were redesigned from scratch.
+
+**Actual Android Code Changes at this step:** Only the approved Sideload REV3 tab (XML, 2 localizations, selected ZIP filename display + legacy execution invocation). The full application is NOT built or qualified yet. The source code version remains `versionName=6.0.0-alpha11` — this is NOT a finished NekoFlash 2.0 release.
+
+**Key Documentation:** Read `NEKOFLASH2-REV5-AUDIT-AND-ROADMAP-RU.md`, then `CHANGED-FILES.txt`, `SIDELOAD-REV3-IMPLEMENTATION.patch`; sources: repository root.
+
+**Quick Offline Verification:** Run `python3 tests/check_rev5.py` from repository root. Standard Python 3 is required.
+
+**Android Build:** Requires JDK 17, Android SDK 36, CMake/NDK, Gradle Wrapper from original source: `./gradlew :app:assembleDebug`. In environments without Android SDK, build and USB tests are skipped.
+
+**Next Coding Milestone:** Unified USB panel + full-screen terminal (preserving USB backend and approved UI) and removal of the persistent Home Operation Center **only after migrating status presentation**.
+
+**Important Safety Note:** REV4 does not mean real bootloader unlocking was performed or that the Xiaomi API is currently operational. Never trigger unlock on hardware without explicit authorization from the device owner.
+
+---
+
+## Русская версия / Russian Version
+
 # NekoFlash 2.0 REV5 — точка продолжения
 
 **Основа:** ORIGINAL `NekoFlash-main-legacy.zip` (SHA256 указан в `LEGACY-SOURCE-SHA256.json`). НЕ NekoFlash Pro.
