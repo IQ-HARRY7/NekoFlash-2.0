@@ -1,4 +1,14 @@
-# Physical-device validation
+<div align="center">
+
+<img src="artwork/nekoflash_launcher_circle_cat_v6.0.0.png" width="160" height="160" style="display: block; margin: 0 auto;" alt="NekoFlash Logo" />
+
+# Physical-Device Validation
+
+### Hardware testing results, qualification matrix, and device evidence
+
+English
+
+</div>
 
 This document is the public index of NekoFlash physical-device testing. It contains only hardware-validation facts that are useful for release qualification. Raw diagnostic logs, USB traces, account data, device serials, private photographs, chat/continuation notes, recovery archives, temporary plans and operator-state files are intentionally not part of the public repository.
 

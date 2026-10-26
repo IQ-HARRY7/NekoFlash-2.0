@@ -1,18 +1,26 @@
-# NekoFlash 2.0 — development checkpoint REV5
+<div align="center">
 
-> **Статус:** проект в разработке. Это полный Android-исходник оригинального NekoFlash 6.0.0-alpha11 с первым переносом согласованного экрана **Sideload REV3**. Это **не NekoFlash Pro** и **не готовый APK NekoFlash 2.0**. Остальной утверждённый дизайн REV2/REV4 ещё не перенесён в Android-код. Не выполняйте разблокировку без отдельного разрешения владельца устройства.
+<img src="docs/artwork/nekoflash_launcher_circle_cat_v6.0.0.png" width="160" height="160" style="display: block; margin: 0 auto;" alt="NekoFlash Logo" />
 
-- [Аудит и дорожная карта REV5](docs/source-audit/NEKOFLASH2-REV5-AUDIT-AND-ROADMAP-RU.md)
-- [Утверждённый дизайн и контрольные решения](docs/design-approved/README.md)
-- [Детали исходной точки и локальные проверки](docs/source-audit/README-FIRST-RU.md)
+# NekoFlash 2.0
 
-**CI:** push и Pull Request проверяют lint + Debug APK; подписанный Release в workflow сборки запускается вручную с настроенными secrets. Выпуск по тегу остаётся отдельным workflow. Отсутствие release-ключей не должно делать первоначальный push красным.
+### Android USB OTG ADB & Fastboot Flashing Tool
+
+English&nbsp;&nbsp;|&nbsp;&nbsp;[Русский](README_ru.md)
+
+</div>
+
+## Development Checkpoint REV5
+
+> **Status:** Project in active development. This is the complete Android source tree of the original NekoFlash 6.0.0-alpha11 with the initial migration of the approved **Sideload REV3** screen. This is **not NekoFlash Pro** and **not a finished NekoFlash 2.0 APK**. The remaining approved REV2/REV4 design has not yet been ported to Android code. Do not perform unlocking without explicit authorization from the device owner.
+
+- [REV5 Audit and Implementation Roadmap](docs/source-audit/NEKOFLASH2-REV5-AUDIT-AND-ROADMAP-RU.md)
+- [Approved Design and Checkpoint Decisions](docs/design-approved/README.md)
+- [Baseline Details and Local Verification](docs/source-audit/README-FIRST-RU.md)
+
+**CI:** Push and Pull Request verify lint + Debug APK; signed Release in build workflow is triggered manually with configured secrets. Release by tag remains an independent workflow. Missing release signing keys will not fail an initial push.
 
 ---
-
-## Исходная документация NekoFlash (историческая версия)
-
-# NekoFlash
 
 **NekoFlash** is an Android USB OTG flashing tool for controlling, servicing, and flashing another Android device directly from a phone or tablet — **without a PC** and without root on the host device.
 
