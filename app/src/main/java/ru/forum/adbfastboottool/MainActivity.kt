@@ -189,7 +189,11 @@ class MainActivity : AppCompatActivity() {
         data class FastbootLogicalInfo(val partition: String) : TerminalAction()
         data class FastbootFetch(val partition: String, val outputFile: File, val slot: String? = null) : TerminalAction()
         data class AdbService(val service: String) : TerminalAction()
-        data class AdbShell(val command: String) : TerminalAction()
+        data class AdbShell(
+            val command: String,
+            val outputFile: File? = null,
+            val append: Boolean = false
+        ) : TerminalAction()
         data class AdbPush(val localFile: File, val remotePath: String) : TerminalAction()
         data class AdbPull(val remotePath: String, val localFile: File) : TerminalAction()
         data class AdbInstall(val packageFile: File, val options: List<String>) : TerminalAction()
@@ -984,7 +988,11 @@ class MainActivity : AppCompatActivity() {
                         "ERROR: ADB device is not connected. Command was not sent."
                     )
                 } else {
-                    viewModel.runAdbShell(action.command)
+                    if (action.outputFile != null) {
+                        viewModel.runAdbShellToFile(action.command, action.outputFile, action.append)
+                    } else {
+                        viewModel.runAdbShell(action.command)
+                    }
                 }
             }
             is TerminalAction.AdbPush -> viewModel.runAdbPush(action.localFile, action.remotePath)
@@ -1252,28 +1260,112 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private data class RedirectionSpec(
+        val command: String,
+        val targetPath: String,
+        val append: Boolean
+    )
+
+    private fun extractRedirection(input: String): RedirectionSpec? {
+        var quote: Char? = null
+        var escaping = false
+        var redirIndex = -1
+        var isAppend = false
+
+        var i = 0
+        while (i < input.length) {
+            val ch = input[i]
+            when {
+                escaping -> {
+                    escaping = false
+                }
+                ch == '\\' -> {
+                    escaping = true
+                }
+                quote != null -> {
+                    if (ch == quote) quote = null
+                }
+                ch == '\'' || ch == '"' -> {
+                    quote = ch
+                }
+                ch == '>' -> {
+                    if (i + 1 < input.length && input[i + 1] == '>') {
+                        redirIndex = i
+                        isAppend = true
+                        i++
+                    } else {
+                        redirIndex = i
+                        isAppend = false
+                    }
+                }
+            }
+            i++
+        }
+
+        if (redirIndex < 0) return null
+
+        val cmdPart = input.substring(0, redirIndex).trim()
+        val opLen = if (isAppend) 2 else 1
+        val targetRaw = input.substring(redirIndex + opLen).trim()
+        val targetPath = targetRaw.trim('"', '\'')
+
+        return RedirectionSpec(cmdPart, targetPath, isAppend)
+    }
+
     private fun parseAdbCommand(cmd: String): TerminalAction? {
         val clean = cmd.trim()
         if (clean.isBlank()) return null
-        val tokens = tokenizeCommandLine(clean)
+
+        val redir = extractRedirection(clean)
+        val (commandToParse, outputFile, isAppend) = if (redir != null) {
+            if (redir.targetPath.isBlank()) {
+                viewModel.log("❌ Destination file path is missing after redirection operator")
+                return null
+            }
+            if (redir.command.isBlank()) {
+                viewModel.log("❌ Command is missing before redirection operator")
+                return null
+            }
+            val defaultName = if (redir.command.startsWith("logcat", ignoreCase = true)) "logcat.txt" else "adb-output.txt"
+            val resolvedFile = resolveTerminalOutputFile(redir.targetPath, defaultName) ?: return null
+            Triple(redir.command, resolvedFile, redir.append)
+        } else {
+            Triple(clean, null, false)
+        }
+
+        val tokens = tokenizeCommandLine(commandToParse)
         if (tokens.isEmpty()) return null
         val op = tokens[0].lowercase(Locale.US)
 
-        if (warnIfBatchOrShellSyntax(op, clean, isAdbTab = true)) return null
+        if (warnIfBatchOrShellSyntax(op, commandToParse, isAdbTab = true)) return null
 
         return when (op) {
-            "status", "devices", "get-state" -> TerminalAction.LocalStatus
+            "status", "devices", "get-state" -> {
+                if (outputFile != null) {
+                    viewModel.log("⚠️ Redirection is not supported for $op; use adb shell commands for file redirection.")
+                    null
+                } else {
+                    TerminalAction.LocalStatus
+                }
+            }
             "reports", "open-reports", "report-folder", "reports-folder" -> TerminalAction.OpenReportsFolder
 
             "shell" -> {
-                val shellCommand = clean.substringAfterWord("shell").trim()
-                TerminalAction.AdbShell(shellCommand)
+                val shellCommand = commandToParse.substringAfterWord("shell").trim()
+                if (outputFile != null && shellCommand.isBlank()) {
+                    viewModel.log("❌ Interactive shell cannot be redirected to a file. Provide a command, e.g.: adb logcat > logcat.txt")
+                    null
+                } else {
+                    TerminalAction.AdbShell(shellCommand, outputFile, isAppend)
+                }
             }
 
             "exec" -> {
-                val execCommand = clean.substringAfterWord("exec").trim()
+                val execCommand = commandToParse.substringAfterWord("exec").trim()
                 if (execCommand.isBlank()) {
                     invalidTerminalFormat("adb exec <command>")
+                } else if (outputFile != null) {
+                    TerminalAction.AdbShell(execCommand, outputFile, isAppend)
                 } else {
                     TerminalAction.AdbService("exec:$execCommand")
                 }
@@ -1293,7 +1385,7 @@ class MainActivity : AppCompatActivity() {
             }
 
             "raw", "service" -> {
-                val service = clean.substringAfterWord(op).trim()
+                val service = commandToParse.substringAfterWord(op).trim()
                 if (service.isBlank()) {
                     invalidTerminalFormat("adb $op <service>, for example adb raw shell:getprop")
                 } else {
@@ -1301,9 +1393,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            "logcat" -> TerminalAction.AdbShell(clean)
+            "logcat" -> TerminalAction.AdbShell(commandToParse, outputFile, isAppend)
             "getprop", "setprop", "pm", "am", "cmd", "settings", "wm", "input", "svc", "dumpsys", "cat", "ls", "cd", "pwd", "id", "su", "sh" ->
-                TerminalAction.AdbShell(clean)
+                TerminalAction.AdbShell(commandToParse, outputFile, isAppend)
 
             "push" -> {
                 if (tokens.size < 3) {
@@ -1354,7 +1446,7 @@ class MainActivity : AppCompatActivity() {
                 null
             }
 
-            else -> TerminalAction.AdbShell(clean)
+            else -> TerminalAction.AdbShell(commandToParse, outputFile, isAppend)
         }
     }
 

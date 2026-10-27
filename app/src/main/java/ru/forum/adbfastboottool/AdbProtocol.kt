@@ -35,6 +35,7 @@ class AdbProtocol(
     private var adbInterface: UsbInterface? = null
 
     @Volatile private var cancelled = false
+    val isCancelled: Boolean get() = cancelled
     private var nextLocalId = 2
     private val adbKeyStore by lazy { AdbKeyStore(keyDirectory, onLog) }
     private val deviceFeatures = linkedSetOf<String>()
@@ -1389,6 +1390,302 @@ class AdbProtocol(
         }
 
         return runShellCommandForResult(cleanCommand, logOutput = true, forceLegacy = forceLegacy).success
+    }
+
+    fun runShellCommandToFile(
+        command: String,
+        outputFile: File,
+        append: Boolean = false,
+        forceLegacy: Boolean = false
+    ): Boolean {
+        if (!isConnected) {
+            onLog("❌ ADB is not connected")
+            return false
+        }
+        cancelled = false
+
+        val cleanCommand = command.trim()
+        if (cleanCommand.isBlank()) {
+            onLog("❌ Shell command is empty for redirection")
+            return false
+        }
+
+        val parent = outputFile.parentFile
+        if (parent != null && !parent.exists() && !parent.mkdirs()) {
+            onLog("❌ Could not create destination folder: ${parent.absolutePath}")
+            return false
+        }
+
+        val opLabel = if (append) ">>" else ">"
+        onLog("-> adb shell: $cleanCommand $opLabel ${outputFile.absolutePath}")
+        onLog("📝 Redirecting output to ${outputFile.name} (${outputFile.absolutePath})")
+        onLog("ℹ️ Tap Cancel or Stop at any time to finish capturing.")
+        onProgress(-1, "Redirecting to ${outputFile.name} · waiting for data…")
+
+        return if (!forceLegacy && supportsShellV2) {
+            runShellV2ToFile(cleanCommand, outputFile, append)
+        } else {
+            runLegacyShellToFile(cleanCommand, outputFile, append)
+        }
+    }
+
+    private fun runShellV2ToFile(
+        command: String,
+        outputFile: File,
+        append: Boolean
+    ): Boolean {
+        val service = "shell,v2,raw:$command"
+        val stream = openAdbStream(service, logOpen = false) ?: run {
+            onLog("⚠️ shell_v2 could not open; falling back to legacy shell")
+            return runLegacyShellToFile(command, outputFile, append)
+        }
+
+        var totalBytes = 0L
+        val startNs = System.nanoTime()
+        var lastProgressNs = startNs
+        var lastLoggedBytes = 0L
+        var exitCode: Int? = null
+
+        try {
+            if (!writeShellPacket(stream, SHELL_ID_CLOSE_STDIN, EMPTY_PAYLOAD)) {
+                onLog("❌ Failed to close stdin for shell command")
+                return false
+            }
+
+            java.io.FileOutputStream(outputFile, append).buffered().use { outputStream ->
+                while (!cancelled && !stream.closed) {
+                    while (pendingByteCount(stream) >= SHELL_PACKET_HEADER) {
+                        val headerRaw = peekPendingExact(stream, SHELL_PACKET_HEADER) ?: break
+                        val id = headerRaw[0].toInt() and 0xFF
+                        val length = ByteBuffer.wrap(headerRaw, 1, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                        if (length < 0 || length > MAX_PAYLOAD) {
+                            onLog("❌ shell_v2: invalid length packet=$length")
+                            stream.closed = true
+                            break
+                        }
+                        if (pendingByteCount(stream) < SHELL_PACKET_HEADER + length) break
+
+                        readPendingExact(stream, SHELL_PACKET_HEADER)
+                        val payload = readPendingExact(stream, length) ?: EMPTY_PAYLOAD
+
+                        when (id) {
+                            SHELL_ID_STDOUT -> {
+                                if (payload.isNotEmpty()) {
+                                    outputStream.write(payload)
+                                    totalBytes += payload.size
+                                }
+                            }
+                            SHELL_ID_STDERR -> {
+                                logShellOutput(payload, isStderr = true)
+                            }
+                            SHELL_ID_EXIT -> {
+                                exitCode = payload.firstOrNull()?.toInt()?.and(0xFF) ?: 0
+                                stream.closed = true
+                            }
+                        }
+                    }
+
+                    if (exitCode != null || stream.closed) break
+
+                    val nowNs = System.nanoTime()
+                    if (nowNs - lastProgressNs >= 1_500_000_000L || (totalBytes - lastLoggedBytes >= 512 * 1024L && nowNs - lastProgressNs >= 500_000_000L)) {
+                        val elapsedMs = (nowNs - startNs) / 1_000_000L
+                        val formattedSize = formatBytes(totalBytes)
+                        val formattedTime = formatDuration(elapsedMs)
+                        onProgress(-1, "Writing to ${outputFile.name} · $formattedSize ($formattedTime)")
+                        if (totalBytes != lastLoggedBytes) {
+                            onLog("📝 ${outputFile.name}: $formattedSize written ($formattedTime)")
+                            lastLoggedBytes = totalBytes
+                        }
+                        lastProgressNs = nowNs
+                    }
+
+                    val header = readHeader(timeoutMs = 500)
+                    if (header == null) {
+                        if (cancelled || dispatcherTransportFailed) break
+                        continue
+                    }
+
+                    when (header.command) {
+                        A_WRTE -> {
+                            val data = readData(header.dataLength) ?: run {
+                                onLog("❌ Failed to read ADB data payload")
+                                stream.closed = true
+                                break
+                            }
+                            sendMessageInternal(A_OKAY, stream.localId, header.arg0, EMPTY_PAYLOAD)
+                            if (data.isNotEmpty()) {
+                                stream.pending.add(data)
+                            }
+                        }
+                        A_OKAY -> {
+                            if (header.dataLength > 0) readData(header.dataLength)
+                            stream.remoteId = header.arg0
+                        }
+                        A_CLSE -> {
+                            if (header.dataLength > 0) readData(header.dataLength)
+                            stream.closed = true
+                            break
+                        }
+                        else -> {
+                            if (header.dataLength > 0) readData(header.dataLength)
+                            onLog("⚠️ shell_v2: unexpected packet cmd=0x${header.command.toString(16)}")
+                        }
+                    }
+                }
+
+                while (pendingByteCount(stream) >= SHELL_PACKET_HEADER) {
+                    val headerRaw = peekPendingExact(stream, SHELL_PACKET_HEADER) ?: break
+                    val id = headerRaw[0].toInt() and 0xFF
+                    val length = ByteBuffer.wrap(headerRaw, 1, 4).order(ByteOrder.LITTLE_ENDIAN).int
+                    if (length < 0 || length > MAX_PAYLOAD || pendingByteCount(stream) < SHELL_PACKET_HEADER + length) break
+                    readPendingExact(stream, SHELL_PACKET_HEADER)
+                    val payload = readPendingExact(stream, length) ?: EMPTY_PAYLOAD
+                    when (id) {
+                        SHELL_ID_STDOUT -> {
+                            if (payload.isNotEmpty()) {
+                                outputStream.write(payload)
+                                totalBytes += payload.size
+                            }
+                        }
+                        SHELL_ID_STDERR -> logShellOutput(payload, isStderr = true)
+                        SHELL_ID_EXIT -> {
+                            if (exitCode == null) exitCode = payload.firstOrNull()?.toInt()?.and(0xFF) ?: 0
+                        }
+                    }
+                }
+                outputStream.flush()
+            }
+        } catch (e: Exception) {
+            onLog("❌ shell_v2 redirection error: ${e.message ?: e.javaClass.simpleName}")
+            return false
+        } finally {
+            closeAdbStream(stream)
+        }
+
+        val totalElapsedMs = (System.nanoTime() - startNs) / 1_000_000L
+        val formattedFinalSize = formatBytes(totalBytes)
+        val formattedFinalTime = formatDuration(totalElapsedMs)
+
+        return if (cancelled) {
+            onLog("⏹ Output redirection stopped by user: ${outputFile.absolutePath} ($formattedFinalSize, $formattedFinalTime)")
+            onProgress(100, "Stopped ${outputFile.name} · $formattedFinalSize")
+            true
+        } else {
+            exitCode?.let { onLog("=== ADB SHELL EXIT: $it ===") }
+            onLog("✅ Output saved: ${outputFile.absolutePath} ($formattedFinalSize, $formattedFinalTime)")
+            onProgress(100, "Saved ${outputFile.name} · $formattedFinalSize")
+            true
+        }
+    }
+
+    private fun runLegacyShellToFile(
+        command: String,
+        outputFile: File,
+        append: Boolean
+    ): Boolean {
+        val stream = openAdbStream("shell:$command", logOpen = false) ?: run {
+            onLog("❌ Could not open legacy adb shell stream")
+            return false
+        }
+
+        var totalBytes = 0L
+        val startNs = System.nanoTime()
+        var lastProgressNs = startNs
+        var lastLoggedBytes = 0L
+
+        try {
+            java.io.FileOutputStream(outputFile, append).buffered().use { outputStream ->
+                while (!cancelled && !stream.closed) {
+                    val nowNs = System.nanoTime()
+                    if (nowNs - lastProgressNs >= 1_500_000_000L || (totalBytes - lastLoggedBytes >= 512 * 1024L && nowNs - lastProgressNs >= 500_000_000L)) {
+                        val elapsedMs = (nowNs - startNs) / 1_000_000L
+                        val formattedSize = formatBytes(totalBytes)
+                        val formattedTime = formatDuration(elapsedMs)
+                        onProgress(-1, "Writing to ${outputFile.name} · $formattedSize ($formattedTime)")
+                        if (totalBytes != lastLoggedBytes) {
+                            onLog("📝 ${outputFile.name}: $formattedSize written ($formattedTime)")
+                            lastLoggedBytes = totalBytes
+                        }
+                        lastProgressNs = nowNs
+                    }
+
+                    val header = readHeader(timeoutMs = 500)
+                    if (header == null) {
+                        if (cancelled || dispatcherTransportFailed) break
+                        continue
+                    }
+
+                    when (header.command) {
+                        A_WRTE -> {
+                            stream.remoteId = header.arg0
+                            val data = readData(header.dataLength) ?: run {
+                                onLog("❌ Failed to read legacy shell data payload")
+                                stream.closed = true
+                                break
+                            }
+                            sendMessageInternal(A_OKAY, stream.localId, stream.remoteId, EMPTY_PAYLOAD)
+                            if (data.isNotEmpty()) {
+                                outputStream.write(data)
+                                totalBytes += data.size
+                            }
+                        }
+                        A_OKAY -> {
+                            if (header.dataLength > 0) readData(header.dataLength)
+                            stream.remoteId = header.arg0
+                        }
+                        A_CLSE -> {
+                            if (header.dataLength > 0) readData(header.dataLength)
+                            stream.closed = true
+                            break
+                        }
+                        else -> {
+                            if (header.dataLength > 0) readData(header.dataLength)
+                            onLog("⚠️ legacy shell: unexpected packet cmd=0x${header.command.toString(16)}")
+                        }
+                    }
+                }
+                outputStream.flush()
+            }
+        } catch (e: Exception) {
+            onLog("❌ legacy shell redirection error: ${e.message ?: e.javaClass.simpleName}")
+            return false
+        } finally {
+            closeAdbStream(stream)
+        }
+
+        val totalElapsedMs = (System.nanoTime() - startNs) / 1_000_000L
+        val formattedFinalSize = formatBytes(totalBytes)
+        val formattedFinalTime = formatDuration(totalElapsedMs)
+
+        return if (cancelled) {
+            onLog("⏹ Output redirection stopped by user: ${outputFile.absolutePath} ($formattedFinalSize, $formattedFinalTime)")
+            onProgress(100, "Stopped ${outputFile.name} · $formattedFinalSize")
+            true
+        } else {
+            onLog("✅ Output saved: ${outputFile.absolutePath} ($formattedFinalSize, $formattedFinalTime)")
+            onProgress(100, "Saved ${outputFile.name} · $formattedFinalSize")
+            true
+        }
+    }
+
+    private fun formatBytes(bytes: Long): String {
+        val units = arrayOf("B", "KB", "MB", "GB")
+        var value = bytes.toDouble()
+        var unit = 0
+        while (value >= 1024.0 && unit < units.lastIndex) {
+            value /= 1024.0
+            unit += 1
+        }
+        return if (unit == 0) "${bytes} B" else String.format(Locale.US, "%.2f %s", value, units[unit])
+    }
+
+    private fun formatDuration(ms: Long): String {
+        if (ms < 0L) return "0s"
+        val totalSeconds = ms / 1000L
+        val minutes = totalSeconds / 60L
+        val seconds = totalSeconds % 60L
+        return if (minutes > 0L) "${minutes}m ${seconds}s" else "${seconds}s"
     }
 
     fun sendInteractiveShellInput(line: String): Boolean {

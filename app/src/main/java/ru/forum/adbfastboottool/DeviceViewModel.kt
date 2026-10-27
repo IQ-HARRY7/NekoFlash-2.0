@@ -1108,6 +1108,23 @@ class DeviceViewModel(
         }
     }
 
+    fun runAdbShellToFile(command: String, outputFile: File, append: Boolean = false) {
+        val label = if (command.isBlank()) "shell" else command
+        val opVerb = if (append) ">>" else ">"
+        startOperation(
+            text(R.string.notif_adb_command),
+            text(R.string.notif_executing, "$label $opVerb ${outputFile.name}"),
+            heavy = true
+        ) {
+            val proto = adbProtocol ?: failOperation(text(R.string.error_no_adb))
+            if (!proto.isConnected) failOperation(text(R.string.error_no_adb))
+            val success = proto.runShellCommandToFile(command, outputFile, append = append)
+            if (!success && !proto.isCancelled) {
+                failOperation("ADB shell output redirection failed: $label")
+            }
+        }
+    }
+
     fun isInteractiveAdbShellActive(): Boolean = adbProtocol?.hasInteractiveShell == true
 
     fun sendInteractiveAdbShellInput(line: String) {
