@@ -20,7 +20,7 @@ import javax.crypto.spec.SecretKeySpec
  * Клиент официального Mi Unlock API (разблокировка загрузчика Xiaomi).
  *
  * Реализует подписанные POST-запросы к unlock-серверу Xiaomi:
- * nonce → clear → ahaUnlock. Параметры передаются в query string, как в
+ * nonce → clear → новый nonce → ahaUnlock. Параметры передаются в query string, как в
  * актуальном MiUnlockTool; тело POST остаётся пустым.
  */
 class MiUnlockClient(
@@ -44,27 +44,35 @@ class MiUnlockClient(
         private const val MAX_ERROR_BODY_LOG = 300
         private const val SAFE_READ_MAX_ATTEMPTS = 3
         private val SAFE_READ_RETRY_DELAYS_MS = longArrayOf(400L, 1_200L)
+
+        internal fun parseClearInfo(response: JSONObject): ClearInfo =
+            ClearInfo(
+                notice = response.optString("notice", ""),
+                clearsData = when (response.opt("cleanOrNot")?.toString()) {
+                    "0" -> false
+                    "1" -> true
+                    else -> null
+                }
+            )
+
+        internal fun parseWaitHours(response: JSONObject): Int? =
+            (response.optJSONObject("data")?.opt("waitHour") ?: response.opt("data"))
+                ?.toString()?.trim()?.toIntOrNull()?.takeIf { it >= 0 }
     }
 
-    /** Шаг 1: получить nonce от сервера. */
-    fun getNonce(): String {
+    private fun getNonce(): String {
         val r = (1..16).map { "abcdefghijklmnopqrstuvwxyz".random() }.joinToString("")
-        val resp = sendReadWithRetry("/api/v2/nonce") {
-            send(
-                "/api/v2/nonce",
-                mapOf("r" to r)
-            )
-        }
-        return resp.optString("nonce").also {
-            if (it.isNullOrEmpty()) throw IOException("nonce not received: $resp")
-        }
+        val resp = send("/api/v2/nonce", mapOf("r" to r))
+        return (resp.opt("nonce") as? String)?.takeIf { it.isNotBlank() }
+            ?: throw IOException("Xiaomi did not return a nonce")
     }
 
     /** Шаг 2: проверка устройства (чистятся ли данные при разблокировке). */
-    data class ClearInfo(val notice: String, val clearsData: Boolean)
+    data class ClearInfo(val notice: String, val clearsData: Boolean?)
 
-    fun checkClear(product: String, nonce: String): ClearInfo {
+    fun checkClear(product: String): ClearInfo {
         val resp = sendReadWithRetry("/api/v2/unlock/device/clear") {
+            val nonce = getNonce()
             send(
                 "/api/v2/unlock/device/clear",
                 mapOf(
@@ -74,16 +82,14 @@ class MiUnlockClient(
                 )
             )
         }
-        val notice = resp.optString("notice", "")
-        val clean = resp.optInt("cleanOrNot", -1)
-        return ClearInfo(notice, clean == 1)
+        return parseClearInfo(resp)
     }
 
     /**
      * Шаг 3: запрос разблокировки. Возвращает encryptData (hex) для прошивки в
      * устройство, либо бросает с описанием ошибки от сервера.
      */
-    fun requestUnlock(product: String, deviceToken: String, nonce: String): String {
+    fun requestUnlock(product: String, deviceToken: String): String {
         val data = JSONObject().apply {
             put("clientId", "2")
             put("clientVersion", "7.6.727.43")
@@ -101,6 +107,8 @@ class MiUnlockClient(
             put("uid", userId)
         }.toString()
 
+        // Xiaomi consumes the nonce on use. Even a successful clear check cannot share it.
+        val nonce = sendReadWithRetry("/api/v2/nonce") { getNonce() }
         val resp = send(
             "/api/v3/ahaUnlock",
             mapOf("appId" to "1", "data" to data, "nonce" to nonce)
@@ -108,7 +116,8 @@ class MiUnlockClient(
 
         val code = resp.optInt("code", -1)
         if (code != 0) {
-            throw BusinessException(code, describeXiaomiJson(resp))
+            val waitHours = if (code == 20036) parseWaitHours(resp) else null
+            throw BusinessException(code, describeXiaomiJson(resp), xiaomiServerText(resp), waitHours)
         }
         return resp.optString("encryptData", "").also {
             if (it.isEmpty()) throw IOException("encryptData empty in server response")
@@ -244,7 +253,9 @@ class MiUnlockClient(
 
     class BusinessException(
         val code: Int,
-        message: String
+        message: String,
+        val serverText: String?,
+        val waitHours: Int?
     ) : IOException(message)
 
     private class HttpStatusException(
@@ -342,19 +353,11 @@ class MiUnlockClient(
     /** Человекочитаемая причина на основе фактического JSON ответа Xiaomi. */
     private fun describeXiaomiJson(json: JSONObject): String {
         val code = if (json.has("code")) json.optInt("code", Int.MIN_VALUE) else Int.MIN_VALUE
-        val serverText = sequenceOf(
-            "descEN",
-            "descEng",
-            "desc",
-            "description",
-            "message",
-            "error"
-        ).map { json.optString(it, "").trim() }
-            .firstOrNull { it.isNotEmpty() }
-            .orEmpty()
+        val serverText = xiaomiServerText(json).orEmpty()
 
         val fallback = when (code) {
             10000 -> "invalid deviceToken or product"
+            10005 -> "server rejected the unlock nonce"
             10013 -> "device is not activated or the activation period is too short"
             10023 -> "unlockable-device limit reached for the account"
             20030 -> "monthly unlock-data request limit reached for the account"
@@ -385,6 +388,12 @@ class MiUnlockClient(
                 "Xiaomi: ${json.toString()}"
         }
     }
+
+    private fun xiaomiServerText(json: JSONObject): String? =
+        sequenceOf("descEN", "descEng", "desc", "description", "message", "error")
+            .mapNotNull { json.opt(it) as? String }
+            .map(String::trim)
+            .firstOrNull { it.isNotEmpty() }
 
     private fun cookieNames(cookieHeader: String): String =
         cookieHeader.split(";")
