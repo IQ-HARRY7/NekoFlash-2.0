@@ -5,8 +5,8 @@
 <p align="center"><strong>ADB · Fastboot · Recovery · Sideload</strong><br>Управляй одним Android-телефоном с другого через USB OTG.</p>
 
 <p align="center">
-  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha12/NekoFlash-6.0.0-alpha12.apk"><img src="docs/assets/readme/download-ru.svg" width="196" height="46" alt="Скачать APK"></a>
-  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha12/NekoFlash-6.0.0-alpha12.apk.sha256"><img src="docs/assets/readme/checksum-ru.svg" width="142" height="46" alt="SHA-256"></a>
+  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha13/NekoFlash-6.0.0-alpha13.apk"><img src="docs/assets/readme/download-ru.svg" width="196" height="46" alt="Скачать APK"></a>
+  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha13/NekoFlash-6.0.0-alpha13.apk.sha256"><img src="docs/assets/readme/checksum-ru.svg" width="142" height="46" alt="SHA-256"></a>
   <a href="https://github.com/Ncorror/NekoFlash-2.0/releases"><img src="docs/assets/readme/releases-ru.svg" width="170" height="46" alt="Все релизы"></a>
 </p>
 <p align="center">
@@ -17,7 +17,7 @@
 
 <p align="center">Android 8.0+ · USB Host / OTG · Без root на телефоне-хосте<br><a href="README.md">English</a> · <strong>Русский</strong></p>
 
-**Актуальный подписанный релиз:** [6.0.0-alpha12](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha12) · versionCode **235** · [APK, 4,6 МиБ](https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha12/NekoFlash-6.0.0-alpha12.apk)
+**Актуальный подписанный релиз:** [6.0.0-alpha13](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha13) · versionCode **236** · [APK, 4,6 МиБ](https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha13/NekoFlash-6.0.0-alpha13.apk)
 
 NekoFlash превращает Android-телефон или планшет в хост для ADB и Fastboot. Прошивай совместимые образы, отправляй ZIP через Recovery, устанавливай APK, передавай файлы и выполняй команды прямо с телефона. Приложение сохраняет полные журналы операций и поддерживает работу с Mi Account и разблокировкой загрузчика Xiaomi.
 
@@ -42,7 +42,7 @@ NekoFlash превращает Android-телефон или планшет в �
 
 Root на телефоне-хосте не требуется. Операции на втором устройстве зависят от его режима, состояния загрузчика и схемы разделов. NekoFlash поддерживает устройства без A/B-слотов и не предполагает, что слоты есть у всех.
 
-**Статус Xiaomi Unlock:** вход в Mi Account и обнаружение Fastboot проверены. После переписывания кода полная разблокировка ещё требует повторного сквозного теста на заблокированном устройстве. Разрешения аккаунта и срок ожидания определяет Xiaomi. [Актуальная инструкция](https://nekoflash.ncorror.chatgpt.site/ru/guides/xiaomi-unlock-without-pc/).
+**Статус Xiaomi Unlock:** на POCO F5 (`marble`) Xiaomi вернула код `20036` и указала, что осталось 164 часа. Продолжим полный тест разблокировки после окончания срока ожидания Xiaomi. [Актуальная инструкция](https://nekoflash.ncorror.chatgpt.site/ru/guides/xiaomi-unlock-without-pc/).
 
 ## Интерфейс
 
@@ -70,10 +70,10 @@ Root на телефоне-хосте не требуется. Операции 
 <details>
 <summary>Контрольная сумма APK и состав релиза</summary>
 
-SHA-256 файла `NekoFlash-6.0.0-alpha12.apk`:
+SHA-256 файла `NekoFlash-6.0.0-alpha13.apk`:
 
 ```text
-f5013cb895d11f7c42272075eb384e0b0bbc9d1fa3d537321504fbd01499e53b
+16d04d1545116c9a4fed56e19efe25aad9cb68444e9a4ca5819ce860b21fc6c9
 ```
 
 Релиз содержит подписанный APK, файл `.sha256` и `filesystem-tools-source.tar.gz` — обязательные соответствующие исходники встроенных инструментов файловых систем. Debug/test-артефакты из Actions публикуются отдельно от подписанного релиза.
@@ -83,7 +83,7 @@ f5013cb895d11f7c42272075eb384e0b0bbc9d1fa3d537321504fbd01499e53b
 <details>
 <summary>Проверки и известные особенности устройств</summary>
 
-Релиз alpha12 прошёл **409 JVM-тестов**, **по 29 тестов установленного приложения на Android API 26 и 34**, независимую проверку ext4/F2FS и Android Lint. Аппаратные результаты относятся к принятой кампании alpha11; отдельную новую серию физических тестов alpha12 не заявляем.
+Релизный коммит alpha13 прошёл JVM-тесты, тесты установленного приложения на Android API 26 и 34, независимую проверку ext4/F2FS и Android Lint. [Результаты GitHub Actions](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/43757298601).
 
 - **POCO X3 Pro / vayu:** Fastboot format/wipe и последующая загрузка Android — FIELD PASS.
 - **X3 Pro host → X3 Pro target:** повторные Pull/Push 128 МиБ с совпадающим SHA-256 — FIELD PASS.
