@@ -5,8 +5,8 @@
 <p align="center"><strong>ADB · Fastboot · Recovery · Sideload</strong><br>Use one Android phone to manage another over USB OTG.</p>
 
 <p align="center">
-  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha13/NekoFlash-6.0.0-alpha13.apk"><img src="docs/assets/readme/download-en.svg" width="196" height="46" alt="Download APK"></a>
-  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha13/NekoFlash-6.0.0-alpha13.apk.sha256"><img src="docs/assets/readme/checksum-en.svg" width="142" height="46" alt="SHA-256"></a>
+  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha14/NekoFlash-6.0.0-alpha14.apk"><img src="docs/assets/readme/download-en.svg" width="196" height="46" alt="Download APK"></a>
+  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha14/NekoFlash-6.0.0-alpha14.apk.sha256"><img src="docs/assets/readme/checksum-en.svg" width="142" height="46" alt="SHA-256"></a>
   <a href="https://github.com/Ncorror/NekoFlash-2.0/releases"><img src="docs/assets/readme/releases-en.svg" width="162" height="46" alt="All releases"></a>
 </p>
 <p align="center">
@@ -17,7 +17,7 @@
 
 <p align="center">Android 8.0+ · USB Host / OTG · No root required on the host<br><strong>English</strong> · <a href="README_ru.md">Русский</a></p>
 
-**Current signed release:** [6.0.0-alpha13](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha13) · versionCode **236** · [APK, 4.6 MiB](https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha13/NekoFlash-6.0.0-alpha13.apk)
+**Current signed release:** [6.0.0-alpha14](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha14) · versionCode **237** · [APK, 4.6 MiB](https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha14/NekoFlash-6.0.0-alpha14.apk)
 
 NekoFlash turns an Android phone or tablet into an ADB and Fastboot host. Flash compatible images, send Recovery ZIPs, install APKs, transfer files and run commands directly from your phone. The application keeps complete operation logs and supports the Xiaomi account and bootloader-unlock workflow.
 
@@ -70,10 +70,10 @@ Download the public signed APK from [GitHub Releases](https://github.com/Ncorror
 <details>
 <summary>APK checksum and release contents</summary>
 
-SHA-256 of `NekoFlash-6.0.0-alpha13.apk`:
+SHA-256 of `NekoFlash-6.0.0-alpha14.apk`:
 
 ```text
-16d04d1545116c9a4fed56e19efe25aad9cb68444e9a4ca5819ce860b21fc6c9
+99eb48da0d2642cfa32304b87b471b0ec6e701407bab37bb5b1c01902b9b42cf
 ```
 
 The release contains the signed APK, its `.sha256` file and `filesystem-tools-source.tar.gz`, the required corresponding source for bundled filesystem tools. Actions debug/test artifacts are separate from the signed public release.
@@ -83,7 +83,7 @@ The release contains the signed APK, its `.sha256` file and `filesystem-tools-so
 <details>
 <summary>Validation and known device cases</summary>
 
-The alpha13 release commit passed JVM tests, installed-app tests on Android API 26 and 34, independent ext4/F2FS verification and Android Lint. [GitHub Actions results](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/43757298601).
+The alpha14 release commit passed 434 JVM tests and 58 installed-app tests (29 each on Android API 26 and 34), independent ext4/F2FS verification and Android Lint with no findings. [GitHub Actions results](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44166568760).
 
 - **POCO X3 Pro / vayu:** Fastboot format/wipe and subsequent Android boot — FIELD PASS.
 - **X3 Pro host → X3 Pro target:** repeated 128 MiB Pull/Push with matching SHA-256 — FIELD PASS.

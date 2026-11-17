@@ -6,7 +6,7 @@
 
 </div>
 
-## 6.0.0-alpha14 — 17 November 2026
+## 6.0.0-alpha14 — 18 November 2026
 
 Mi Unlock completion fix, versionCode `237`.
 
