@@ -120,6 +120,9 @@ class AdbProtocol(
 
     enum class PeerMode { DEVICE, RECOVERY, SIDELOAD, UNKNOWN }
 
+    /** Host-side stdout redirect of a one-shot shell command: `adb logcat > file`. */
+    data class ShellRedirect(val target: File, val append: Boolean)
+
     enum class SideloadFailureKind { FILE, TRANSPORT, PROTOCOL }
 
     sealed class SideloadResult {
@@ -1679,16 +1682,85 @@ class AdbProtocol(
         }
     }
 
-    fun runShellCommand(command: String, forceLegacy: Boolean = false): Boolean {
+    fun runShellCommand(
+        command: String,
+        forceLegacy: Boolean = false,
+        redirect: ShellRedirect? = null
+    ): Boolean {
         if (!isConnected) return false
         cancelled = false
 
         val cleanCommand = command.trim()
         if (cleanCommand.isBlank()) {
-            return startInteractiveShell()
+            // An interactive shell has no single stdout to save.
+            return redirect == null && startInteractiveShell()
         }
+        if (redirect != null) return runShellCommandToFile(cleanCommand, forceLegacy, redirect)
 
         return runShellCommandForResult(cleanCommand, logOutput = true, forceLegacy = forceLegacy).success
+    }
+
+    private fun runShellCommandToFile(command: String, forceLegacy: Boolean, redirect: ShellRedirect): Boolean {
+        val startedNs = System.nanoTime()
+        val result = runShellCommandForResult(
+            command, logOutput = true, forceLegacy = forceLegacy, redirect = redirect
+        )
+        return publishShellRedirect(redirect, result, (System.nanoTime() - startedNs) / 1_000_000L)
+    }
+
+    /** Saves the captured stdout once, after the command ended, stopped or was interrupted. */
+    private fun publishShellRedirect(redirect: ShellRedirect, result: ShellResult, elapsedMs: Long): Boolean {
+        val raw = result.rawStdoutFile
+        if (raw == null || !raw.isFile) {
+            onLog("❌ Output could not be captured, so nothing was saved to ${redirect.target.absolutePath}")
+            return false
+        }
+        val end = AdbShellRedirectPolicy.endOf(result.success, cancelled, result.exitCode)
+        val bytes = raw.length()
+        if (!AdbShellRedirectPolicy.shouldPublish(end, bytes)) {
+            onLog(AdbShellRedirectPolicy.skippedLine(end, redirect.target, result.exitCode))
+            return AdbShellRedirectPolicy.succeeded(end)
+        }
+        return try {
+            val saved = AdbShellRedirectPublisher.publish(
+                raw, redirect.target, redirect.append,
+                availableSpace = { android.os.StatFs(it.absolutePath).availableBytes }
+            )
+            onLog(AdbShellRedirectPolicy.savedLine(
+                end, redirect.target, redirect.append,
+                saved.copiedBytes, saved.targetBytes, elapsedMs, result.exitCode
+            ))
+            AdbShellRedirectPolicy.succeeded(end)
+        } catch (error: LocalFileCopy.NotEnoughSpace) {
+            onLog(AdbShellRedirectPolicy.saveFailedLine(
+                redirect.target, AdbShellRedirectPolicy.notEnoughSpaceReason(error.required, error.available)
+            ))
+            onLog(AdbShellRedirectPolicy.rawKeptLine(raw))
+            false
+        } catch (error: Exception) {
+            onLog(AdbShellRedirectPolicy.saveFailedLine(
+                redirect.target, error.message ?: error.javaClass.simpleName
+            ))
+            onLog(AdbShellRedirectPolicy.rawKeptLine(raw))
+            false
+        }
+    }
+
+    /** Counts redirected stdout and reports it at a calm pace. */
+    private inner class RedirectProgress(redirect: ShellRedirect) {
+        private val name = redirect.target.name
+        private val startedMs = System.nanoTime() / 1_000_000L
+        private val meter = AdbShellRedirectPolicy.ProgressMeter(startedMs)
+        private var bytes = 0L
+
+        fun accept(count: Int) {
+            bytes += count
+            val nowMs = System.nanoTime() / 1_000_000L
+            val tick = meter.tick(nowMs)
+            if (tick.ui) onProgress(-1, AdbShellRedirectPolicy.progressDetail(bytes, nowMs - startedMs))
+            if (tick.log) onLog(AdbShellRedirectPolicy.progressLine(name, bytes, nowMs - startedMs))
+            if (tick.hint) onLog(AdbShellRedirectPolicy.hintLine())
+        }
     }
 
     fun sendInteractiveShellBytes(payload: ByteArray): Boolean =
@@ -2063,14 +2135,15 @@ class AdbProtocol(
         command: String,
         logOutput: Boolean = true,
         forceLegacy: Boolean = false,
-        captureOutput: Boolean = !logOutput
+        captureOutput: Boolean = !logOutput,
+        redirect: ShellRedirect? = null
     ): ShellResult {
         val cleanCommand = command.trim()
         return if (!forceLegacy && supportsShellV2) {
-            runShellV2ForResult(cleanCommand, logOutput, captureOutput)
+            runShellV2ForResult(cleanCommand, logOutput, captureOutput, redirect)
         } else {
             if (logOutput) onLog("ℹ️ adb shell legacy: exit code is unavailable on this device/mode")
-            runLegacyShellForResult(cleanCommand, logOutput, captureOutput)
+            runLegacyShellForResult(cleanCommand, logOutput, captureOutput, redirect)
         }
     }
 
@@ -2085,14 +2158,16 @@ class AdbProtocol(
     private fun runShellV2ForResult(
         command: String,
         logOutput: Boolean,
-        captureOutput: Boolean
+        captureOutput: Boolean,
+        redirect: ShellRedirect? = null
     ): ShellResult {
         val service = "shell,v2,raw:$command"
         if (logOutput) onLog("-> adb shell/v2: $command")
         val stream = openAdbStream(service, logOpen = false) ?: run {
             if (logOutput) onLog("⚠️ shell_v2 could not open; trying legacy shell")
             return runShellCommandForResult(
-                command, logOutput = logOutput, forceLegacy = true, captureOutput = captureOutput
+                command, logOutput = logOutput, forceLegacy = true, captureOutput = captureOutput,
+                redirect = redirect
             )
         }
 
@@ -2101,10 +2176,13 @@ class AdbProtocol(
             return ShellResult("", "", null, false)
         }
         if (logOutput) onLog("ℹ️ Raw ADB shell stdout/stderr: ${record.stdoutFile.absolutePath} / ${record.stderrFile.absolutePath}")
+        if (redirect != null) onLog(AdbShellRedirectPolicy.startLine(redirect.target, redirect.append))
+        val redirectProgress = redirect?.let { RedirectProgress(it) }
         var exitCode: Int? = null
         // Packet boundaries do not align with UTF-8 code points or text lines.
         // Raw binary evidence is written independently of these display views.
-        val stdoutDisplay = if (logOutput) ShellOutputTextRenderer(false, onLog) else null
+        // A redirected stdout goes to the file instead; stderr still shows here.
+        val stdoutDisplay = if (logOutput && redirect == null) ShellOutputTextRenderer(false, onLog) else null
         val stderrDisplay = if (logOutput) ShellOutputTextRenderer(true, onLog) else null
         fun result(success: Boolean): ShellResult {
             stdoutDisplay?.finish()
@@ -2146,6 +2224,7 @@ class AdbProtocol(
                         val data = readAdbStreamExact(stream, header.length) ?: return result(false)
                         record.writeStdout(data)
                         stdoutDisplay?.accept(data)
+                        redirectProgress?.accept(data.size)
                     }
                     SHELL_ID_STDERR -> {
                         val data = readAdbStreamExact(stream, header.length) ?: return result(false)
@@ -2195,7 +2274,8 @@ class AdbProtocol(
     private fun runLegacyShellForResult(
         command: String,
         logOutput: Boolean,
-        captureOutput: Boolean
+        captureOutput: Boolean,
+        redirect: ShellRedirect? = null
     ): ShellResult {
         if (logOutput) onLog("-> adb shell: $command")
         val stream = openAdbStream("shell:$command", logOpen = false)
@@ -2205,7 +2285,12 @@ class AdbProtocol(
             return ShellResult("", "", null, false)
         }
         if (logOutput) onLog("ℹ️ Raw ADB shell stdout: ${record.stdoutFile.absolutePath}")
-        val stdoutDisplay = if (logOutput) ShellOutputTextRenderer(false, onLog) else null
+        if (redirect != null) {
+            onLog(AdbShellRedirectPolicy.startLine(redirect.target, redirect.append))
+            onLog(AdbShellRedirectPolicy.legacyShellNote())
+        }
+        val redirectProgress = redirect?.let { RedirectProgress(it) }
+        val stdoutDisplay = if (logOutput && redirect == null) ShellOutputTextRenderer(false, onLog) else null
         fun result(success: Boolean): ShellResult {
             stdoutDisplay?.finish()
             val (stdout, stderr) = record.finish(null, success, captureOutput)
@@ -2221,6 +2306,7 @@ class AdbProtocol(
                         sendMessageInternal(A_OKAY, stream.localId, stream.remoteId, EMPTY_PAYLOAD)
                         record.writeStdout(data)
                         stdoutDisplay?.accept(data)
+                        redirectProgress?.accept(data.size)
                     }
                     A_OKAY -> {
                         if (header.dataLength > 0) readData(header.dataLength)

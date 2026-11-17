@@ -32,7 +32,7 @@ assert 'FirmwareFixtureProvider' not in (root / 'app/src/main/AndroidManifest.xm
 for name in ('FirmwareSelectionTest', 'FirmwareSelectionLifecycleTest'):
     assert (root / f'app/src/test/java/ru/forum/adbfastboottool/{name}.kt').is_file()
 for name in ('build.yml', 'release.yml'):
-    assert 'tests/check_rev26.py' in (root / '.github/workflows' / name).read_text()
+    assert 'tests/check_rev27.py' in (root / '.github/workflows' / name).read_text()
 # Later revisions may add tests; never regress below REV24's 18-test floor.
 workflow = (root / '.github/workflows/build.yml').read_text()
 required = re.search(r"OK \((\d+) tests\)", workflow)

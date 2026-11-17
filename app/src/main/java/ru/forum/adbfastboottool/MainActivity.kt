@@ -223,7 +223,7 @@ class MainActivity : AppCompatActivity() {
         data class FastbootLogicalInfo(val partition: String) : TerminalAction()
         data class FastbootFetch(val partition: String, val outputFile: File, val slot: String? = null) : TerminalAction()
         data class AdbService(val service: String) : TerminalAction()
-        data class AdbShell(val command: String) : TerminalAction()
+        data class AdbShell(val command: String, val redirect: AdbProtocol.ShellRedirect? = null) : TerminalAction()
         data class AdbPush(val localFile: File, val remotePath: String) : TerminalAction()
         data class AdbPull(val remotePath: String, val localFile: File) : TerminalAction()
         data class AdbInstall(val packageFile: File, val options: List<String>) : TerminalAction()
@@ -1147,7 +1147,7 @@ class MainActivity : AppCompatActivity() {
                         "ERROR: ADB device is not connected. Command was not sent."
                     )
                 } else {
-                    viewModel.runAdbShell(action.command)
+                    viewModel.runAdbShell(action.command, action.redirect)
                 }
             }
             is TerminalAction.AdbPush -> viewModel.runAdbPush(action.localFile, action.remotePath)
@@ -1566,7 +1566,7 @@ class MainActivity : AppCompatActivity() {
 
             "shell" -> {
                 val shellCommand = clean.substringAfterWord("shell").trim()
-                TerminalAction.AdbShell(shellCommand)
+                adbShellAction(shellCommand)
             }
 
             "exec" -> {
@@ -1600,9 +1600,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            "logcat" -> TerminalAction.AdbShell(clean)
+            "logcat" -> adbShellAction(clean)
             "getprop", "setprop", "pm", "am", "cmd", "settings", "wm", "input", "svc", "dumpsys", "cat", "ls", "cd", "pwd", "id", "su", "sh" ->
-                TerminalAction.AdbShell(clean)
+                adbShellAction(clean)
 
             "push" -> {
                 if (tokens.size < 3) {
@@ -1653,10 +1653,28 @@ class MainActivity : AppCompatActivity() {
                 null
             }
 
-            else -> TerminalAction.AdbShell(clean)
+            else -> adbShellAction(clean)
         }
     }
 
+    /**
+     * A shell command, with an unquoted `> file` / `>> file` saved on this phone. The file is
+     * resolved exactly like an `adb pull` destination: relative to /sdcard/Download/NekoFlash.
+     */
+    private fun adbShellAction(command: String): TerminalAction? =
+        when (val parsed = AdbShellRedirectPolicy.parse(command)) {
+            AdbShellRedirectPolicy.Parsed.None -> TerminalAction.AdbShell(command)
+            is AdbShellRedirectPolicy.Parsed.Invalid -> {
+                viewModel.log("❌ ${parsed.reason}")
+                null
+            }
+            is AdbShellRedirectPolicy.Parsed.Redirect -> {
+                val file = resolveTerminalOutputFile(
+                    parsed.target, AdbShellRedirectPolicy.defaultFileName(parsed.command)
+                ) ?: return null
+                TerminalAction.AdbShell(parsed.command, AdbProtocol.ShellRedirect(file, parsed.append))
+            }
+        }
 
     private fun parseAdbInstallMultiple(tokens: List<String>): TerminalAction? {
         if (tokens.size < 3) return invalidTerminalFormat("adb install-multiple [-r] [-d] [-g] <base.apk> <split1.apk> [split2.apk...]")

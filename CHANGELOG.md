@@ -6,6 +6,12 @@
 
 </div>
 
+## Unreleased
+
+- ADB terminal: an unquoted `>` or `>>` after a shell-style command, for example `adb logcat > logcat.txt`, now saves the command's stdout on the phone instead of sending the redirect to the target device. The file lands where `adb pull` saves files (`/sdcard/Download/NekoFlash`), with the same relative/absolute path and folder rules.
+- The live console stays quiet while the file fills; stderr still shows. Progress shows size, elapsed time and speed, and Stop keeps everything captured so far. The final line reports path, size and time.
+- Overwrite is atomic and keeps the previous file on failure; append rolls back to the original length. Raw shell evidence is never moved or deleted. Quote a redirect (`adb shell sh -c 'cmd > /sdcard/x'`) to run it on the target device, as before.
+
 ## 6.0.0-alpha13 — 15 November 2026
 
 Xiaomi Unlock hotfix, versionCode `236`.
