@@ -6,7 +6,9 @@
 
 </div>
 
-## Unreleased
+## 6.0.0-alpha14 — 17 November 2026
+
+Mi Unlock completion fix, versionCode `237`.
 
 - Complete Mi Unlock when the bootloader returns the final successful response to oem unlock. Persist that result before USB cleanup so the device can wipe/reboot into Android without a mandatory return to Fastboot.
 - Keep a lost final unlock response unconfirmed, preserve the exact device FAIL reason and stage, and retain Xiaomi rejection codes/text, supplied waiting hours and account/session diagnostics.
