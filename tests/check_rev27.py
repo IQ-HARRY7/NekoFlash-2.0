@@ -40,6 +40,15 @@ assert 'LocalFileCopy.copy(' in publisher and '.copyTo(' not in publisher
 assert 'source.delete' not in publisher and 'renameTo' not in publisher and 'Files.move' not in publisher
 assert 'setLength(originalLength)' in publisher
 
+# Keep the terminal's Stop action explicit, localized and wired to cancellation.
+import xml.etree.ElementTree as ET
+ui = ET.parse(root/'app/src/main/res/layout/activity_main.xml').getroot()
+android_ns = '{http://schemas.android.com/apk/res/android}'
+stop = [node for node in ui.iter() if node.attrib.get(android_ns + 'id') == '@+id/btnTerminalStop']
+assert len(stop) == 1 and stop[0].tag == 'com.google.android.material.button.MaterialButton'
+assert stop[0].attrib.get(android_ns + 'text') == '@string/terminal_stop_button'
+assert 'findViewById<View>(R.id.btnTerminalStop).setOnClickListener { requestOperationCancelFromUi() }' in main
+
 # Pure policy: no Android types, no I/O.
 assert 'import android' not in policy and 'FileOutputStream' not in policy and 'readText' not in policy
 assert 'import android' not in human
