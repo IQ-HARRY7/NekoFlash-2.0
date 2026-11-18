@@ -1365,9 +1365,13 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun runAdbShell(command: String) {
+    fun runAdbShell(command: String, redirect: AdbProtocol.ShellRedirect? = null) {
         val interactive = command.isBlank()
-        val label = if (interactive) "interactive shell" else "shell $command"
+        val label = when {
+            interactive -> "interactive shell"
+            redirect != null -> "shell $command > ${redirect.target.name}"
+            else -> "shell $command"
+        }
         // ВАЖНО: интерактивный shell — долгоживущий канал, в который пользователь
         // вводит команды через нижнюю строку. Ему НЕ нужен блокирующий полноэкранный
         // прогресс-диалог (heavy=true): диалог перекрывал ввод и после закрытия
@@ -1383,7 +1387,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         ) {
             val proto = adbProtocol ?: failOperation(text(R.string.error_no_adb))
             if (!proto.isConnected) failOperation(text(R.string.error_no_adb))
-            if (!proto.runShellCommand(command)) failOperation("ADB shell failed: $label")
+            if (!proto.runShellCommand(command, redirect = redirect)) failOperation("ADB shell failed: $label")
         }
     }
 
