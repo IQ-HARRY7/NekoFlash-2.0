@@ -42,6 +42,11 @@ internal object AdbShellRedirectPolicy {
 
         val (target, targetEnd) = readWord(line, targetStart)
         if (target.isBlank()) return Parsed.Invalid("File name is missing after $symbol")
+        // A command separator after the output path changes shell execution order.
+        // Rather than silently moving it into the device command, reject the input.
+        if (hasUnquotedCommandControl(line.substring(targetStart))) {
+            return Parsed.Invalid("Unsupported command separator after > file; place pipelines before the redirect")
+        }
 
         val command = (line.substring(0, operator.start).trimEnd() + " " +
             line.substring(targetEnd).trimStart()).trim()
@@ -180,6 +185,22 @@ internal object AdbShellRedirectPolicy {
             if (standalone) return if (line.substring(digitsStart, operatorStart) == "1") digitsStart else null
         }
         return operatorStart
+    }
+
+    /** Detect unquoted shell separators in the target or in trailing arguments. */
+    private fun hasUnquotedCommandControl(text: String): Boolean {
+        var quote: Char? = null
+        var escaping = false
+        for (ch in text) {
+            when {
+                escaping -> escaping = false
+                ch == '\\' -> escaping = true
+                quote != null -> if (ch == quote) quote = null
+                ch == '\'' || ch == '"' -> quote = ch
+                ch == '|' || ch == ';' || ch == '&' -> return true
+            }
+        }
+        return false
     }
 
     /** Same quote and escape rules as the terminal tokenizer in MainActivity. */
