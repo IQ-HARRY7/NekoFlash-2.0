@@ -1661,8 +1661,8 @@ class MainActivity : AppCompatActivity() {
      * A shell command, with an unquoted `> file` / `>> file` saved on this phone. The file is
      * resolved exactly like an `adb pull` destination: relative to /sdcard/Download/NekoFlash.
      */
-    private fun adbShellAction(command: String): TerminalAction? =
-        when (val parsed = AdbShellRedirectPolicy.parse(command)) {
+    private fun adbShellAction(command: String): TerminalAction? {
+        return when (val parsed = AdbShellRedirectPolicy.parse(command)) {
             AdbShellRedirectPolicy.Parsed.None -> TerminalAction.AdbShell(command)
             is AdbShellRedirectPolicy.Parsed.Invalid -> {
                 viewModel.log("❌ ${parsed.reason}")
@@ -1675,6 +1675,7 @@ class MainActivity : AppCompatActivity() {
                 TerminalAction.AdbShell(parsed.command, AdbProtocol.ShellRedirect(file, parsed.append))
             }
         }
+    }
 
     private fun parseAdbInstallMultiple(tokens: List<String>): TerminalAction? {
         if (tokens.size < 3) return invalidTerminalFormat("adb install-multiple [-r] [-d] [-g] <base.apk> <split1.apk> [split2.apk...]")
