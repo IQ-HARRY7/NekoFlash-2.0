@@ -592,15 +592,29 @@
                     android:textColor="@color/text_secondary"
                     android:maxLines="1"
                     android:ellipsize="end" />
-                <androidx.appcompat.widget.AppCompatImageButton
+                <!-- Explicit Stop action: a visible label is clearer than a lone square icon. -->
+                <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnTerminalStop"
-                    android:layout_width="48dp"
+                    android:layout_width="88dp"
                     android:layout_height="48dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:layout_marginStart="8dp"
                     android:contentDescription="@string/layout_operation_cancel"
-                    android:padding="14dp"
-                    app:srcCompat="@drawable/ic_stop"
-                    app:tint="@color/log_warning" />
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="8dp"
+                    android:text="@string/terminal_stop_button"
+                    android:textAllCaps="true"
+                    android:textColor="@color/log_error"
+                    android:textSize="13sp"
+                    android:textStyle="bold"
+                    app:backgroundTint="#32171A"
+                    app:cornerRadius="12dp"
+                    app:strokeColor="@color/log_error"
+                    app:strokeWidth="1dp" />
             </LinearLayout>
 
             <!-- Единая строка команды: всегда доступна в развёрнутой Console. -->
