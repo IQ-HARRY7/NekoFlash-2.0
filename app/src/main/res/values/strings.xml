@@ -169,7 +169,7 @@ Not requested:
     <string name="layout_operation_center_last_event_empty">Last event: —</string>
     <string name="layout_operation_center_last_event">Latest log entry: %1$s</string>
     <string name="layout_operation_console">Open console</string>
-    <string name="terminal_stop_button">Stop</string>
+    <string name="terminal_stop_button">Cancel</string>
     <string name="layout_operation_cancel">Cancel operation</string>
     <plurals name="layout_operation_steps_more">
         <item quantity="one">… and %1$d more step</item>
