@@ -41,7 +41,7 @@ rev57_sideload_verdict_vm_blob = '9029971de3792a2a4ef04760e29b20fa8c5f412b'
 # Mi Unlock diagnostics add connection-scoped error reporting to this exact blob.
 mi_unlock_diagnostics_vm_blob = 'f408c6b03977b508de737183feaae869722a50bb'
 # REV59: host-side stdout redirect; pin the entire reviewed ViewModel blob.
-rev59_shell_redirect_vm_blob = '64d505e744ab209417ca65906306f626b59a31fc'
+rev59_shell_redirect_vm_blob = '90bb79853e6221d20b9006477175c4ed35fa2e33'
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 if git_blob_sha(raw_vm) in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
