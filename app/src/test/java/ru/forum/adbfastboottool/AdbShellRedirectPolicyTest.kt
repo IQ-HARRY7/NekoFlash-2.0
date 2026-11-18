@@ -96,6 +96,24 @@ class AdbShellRedirectPolicyTest {
         assertTrue(invalid("> out.txt").contains("Nothing to run"))
     }
 
+    @Test fun separatorsAfterHostRedirectAreRejectedWithoutRunningChangedCommands() {
+        listOf(
+            "logcat > out.txt | grep ActivityManager",
+            "logcat > out.txt && echo done",
+            "logcat > out.txt; echo done",
+            "logcat > out.txt;echo done",
+            "logcat >out.txt|grep Foo",
+            "logcat >out.txt& echo done",
+            "logcat > out.txt 2>&1"
+        ).forEach { assertTrue(it, invalid(it).contains("Unsupported command separator")) }
+    }
+
+    @Test fun quotedOrEscapedPunctuationInTargetIsNotACommandSeparator() {
+        assertEquals("semi;colon.txt", redirect("logcat > 'semi;colon.txt'").target)
+        assertEquals("semi;colon.txt", redirect("logcat > semi\\;colon.txt").target)
+        assertEquals("literal|pipe.txt", redirect("logcat > \"literal|pipe.txt\"").target)
+    }
+
     @Test fun defaultFileNameComesFromTheCommand() {
         assertEquals("logcat.txt", AdbShellRedirectPolicy.defaultFileName("logcat -d"))
         assertEquals("getprop.txt", AdbShellRedirectPolicy.defaultFileName("  getprop ro.product.model"))
