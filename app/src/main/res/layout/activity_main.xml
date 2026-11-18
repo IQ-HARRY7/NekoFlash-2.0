@@ -592,7 +592,7 @@
                     android:textColor="@color/text_secondary"
                     android:maxLines="1"
                     android:ellipsize="end" />
-                <!-- Explicit Stop action: a visible label is clearer than a lone square icon. -->
+                <!-- Explicit Cancel action: a visible label is clearer than a lone square icon. -->
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnTerminalStop"
                     android:layout_width="88dp"
