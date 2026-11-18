@@ -1,25 +1,26 @@
 # NekoFlash 2.0 — current status
 
-**Updated:** 15 November 2026
+**Updated:** 18 November 2026
 
 ## Signed release
 
-- Release: [v6.0.0-alpha13](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha13)
-- versionCode: `236`
+- Release: [v6.0.0-alpha14](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha14)
+- versionCode: `237`
 - applicationId: `ru.forum.adbfastboottool`
-- Release commit: `370e36e92854ade8d835b393a66f4ee8d58ef65a`
-- APK SHA-256: `16d04d1545116c9a4fed56e19efe25aad9cb68444e9a4ca5819ce860b21fc6c9`
+- Release commit: `39a90aedb7dcdca6a61d7db38c498be2f87959f5`
+- APK SHA-256: `99eb48da0d2642cfa32304b87b471b0ec6e701407bab37bb5b1c01902b9b42cf`
 - Signing certificate SHA-256: `3d9d8ec98ff5a0aa5e72a257f02babe19c0ff91f0af431955aa9afe8901cf5b2`
-- [Release workflow](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/43757298596): SUCCESS; published, non-draft, normal/latest release.
-- Exact-commit [main CI](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/43757298601): SUCCESS. JVM tests, installed-app tests on API 26/34, independent ext4/F2FS verification and Android Lint.
+- [Release workflow](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44166568661): SUCCESS; published, non-draft, normal/latest release.
+- Exact-commit [main CI](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44166568760): SUCCESS. 434 JVM tests and 58 installed-app tests (29 each on API 26/34), independent ext4/F2FS verification and Android Lint with no findings.
 
-Public assets are the signed APK, its SHA-256 file and the required filesystem corresponding-source archive. Alpha11 and alpha12 remain available as historical signed releases.
+Public assets are the signed APK, its SHA-256 file and the required filesystem corresponding-source archive. Alpha11, alpha12 and alpha13 remain available as historical signed releases.
 
 ## Main and public website
 
-PRs #97–#99 (audit, Settings community links and vector brand icons) and PR #100 (Xiaomi Unlock hotfix and diagnostics) are merged.
+PRs #97–#99 (audit, Settings community links and vector brand icons) and PRs #100–#101 (Xiaomi Unlock diagnostics and completion on the final device response) are merged.
 
 - Public website: [English](https://nekoflash.ncorror.chatgpt.site/) · [Русский](https://nekoflash.ncorror.chatgpt.site/ru/).
+- **Published 18 November:** Site version 8 (source `c0f32bd24b944ed5de689b3347df661fba71a501`) points EN/RU download and help pages to the verified Alpha14 APK and SHA-256. Both Xiaomi guides describe completion on the final device response without a mandatory return to Fastboot. Static checks passed for all 18 sitemap URLs, canonical URLs, local links and Google verification; native publication returned `succeeded`.
 - **Published 15 November:** Site version 7 (source `56896c9291e1229543cddbb5ee8867351589230d`) points both localized download pages to the verified alpha13 APK and SHA-256.
 - **Published 14 November:** the existing public Site moved to **version 6**, hosting source `307639a924a50751e9cbbbaf71493f6a73e453fb`. The approved banner is the first content below the header. The repeated large promotional headline, eyebrow and introductory paragraph below it have been replaced by a compact download block with a functional heading, APK/GitHub actions, compatibility and release/checksum information. EN/RU narrow layouts and both published home pages were checked. The existing project, public address and audience were preserved; the native publication returned `succeeded`.
 - The GitHub `docs/` mirror and live Site now include **18 localized URLs**: both home/help pages, guide indexes and six workflows per language (Android flashing without a PC, ADB without a PC, Fastboot from Android, Recovery/TWRP, ADB Sideload and Xiaomi unlock without a PC).
@@ -31,6 +32,14 @@ PRs #97–#99 (audit, Settings community links and vector brand icons) and PR #1
 - The earlier manual indexing request for `/ru/` was rejected with “Quota exceeded” on 14 November. No new manual indexing request was sent during this publication.
 - **Next step:** check Search Console's discovered-page and indexing reports after Google processes the updated sitemap. Prepared 4PDA/Telegram promotion remains a separate action; no forum post or group message was sent during publication.
 - [4PDA BBCode draft](4PDA_POST_RU.bbcode) requests volunteer verification of actual Xiaomi bootloader unlocking. NekoFlash previously unlocked POCO X3 Pro, POCO F5 and POCO X7 Pro (maintainer-confirmed history). On a locked POCO F5, Xiaomi returned `20036` with 164 hours remaining. A full on-device unlock test is pending the end of that period.
+
+## Mi Unlock result handling — 17 November 2026
+
+Starting with Alpha14, NekoFlash completes Mi Unlock on the final OKAY response to oem unlock, after the unlock payload has been accepted. That terminal receipt is persisted before cleanup; a subsequent USB detach or service shutdown cannot replace it with cancellation. The user can let the phone erase data and boot Android without returning to Fastboot for the normal success path.
+
+An absent final response remains unconfirmed; an explicit FAIL keeps the complete device reason and stage. Xiaomi response codes/text, server-provided waiting hours (including 20036), region guidance and session-expiration handling are retained. The optional later Fastboot check is only for unresolved/legacy attempts, is bound to device identity, and cannot overwrite another task's GUI result. The unlock request and device command are never automatically replayed.
+
+This is an implementation change with automated regression coverage, not a new hardware unlock qualification. The change is included in the published Alpha14 APK; the POCO F5 end-to-end test is still pending Xiaomi's waiting period.
 
 ## Hardware disposition
 
