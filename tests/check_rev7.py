@@ -43,8 +43,12 @@ mi_unlock_diagnostics_vm_blob = 'f408c6b03977b508de737183feaae869722a50bb'
 <<<<<<< HEAD
 =======
 # REV59: host-side stdout redirect; pin the entire reviewed ViewModel blob.
+<<<<<<< HEAD
 rev59_shell_redirect_vm_blob = '64d505e744ab209417ca65906306f626b59a31fc'
 >>>>>>> 863d72e (fix: keep REV7 source pin guards valid after shell redirect)
+=======
+rev59_shell_redirect_vm_blob = '90bb79853e6221d20b9006477175c4ed35fa2e33'
+>>>>>>> 69d48fb (fix: pin actual REV59 DeviceViewModel blob SHA)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 if git_blob_sha(raw_vm) in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
