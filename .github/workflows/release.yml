@@ -105,11 +105,13 @@ jobs:
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "Release provenance OK: $TAG -> $TAG_COMMIT"
   repository-cleanup:
-    name: Remove branches already merged into main
+    # Release publication must not delete contributors' branches as a side effect.
+    # Cleanup can be performed separately with explicit approval.
+    name: Report safely merged branches (dry run only)
     needs: tag-provenance
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
       pull-requests: read
     steps:
       - name: Checkout approved release source
@@ -119,7 +121,7 @@ jobs:
       - name: Prune merged branches without active PRs or newer commits
         env:
           GH_TOKEN: ${{ github.token }}
-        run: python3 scripts/cleanup_merged_branches.py --execute --yes
+        run: python3 scripts/cleanup_merged_branches.py
 
   release:
     name: Build, verify and publish signed APK

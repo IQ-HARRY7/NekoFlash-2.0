@@ -8,6 +8,13 @@
 
 ## Unreleased
 
+## 6.0.0-alpha15 — 19 November 2026
+
+Donor-side ADB stdout redirection contributed by **@IQ-HARRY7** in PR #102, integrated in PR #103. VersionCode `238`. The original contributor commit and author identity are preserved.
+
+Hardware-tested over USB-OTG: POCO F7 (Android 16) → POCO X3 Pro (Android 12), shell_v2. PASS for `>`/`>>`, two ~30 MiB logcat snapshots, quoted filenames, quoted device-side redirection, malformed suffix rejection, and cancellation preserving 3.67 MiB of captured output. Diagnostic manifests SHA-256 verified. Legacy-shell hardware and full-disk scenarios are not claimed as tested.
+
+- Terminal UI: replaced the ambiguous square Stop glyph with a labeled **Cancel / Отмена** action; the existing cancellation handler is preserved.
 - ADB terminal: an unquoted `>` or `>>` after a shell-style command, for example `adb logcat > logcat.txt`, now saves the command's stdout on the phone instead of sending the redirect to the target device. The file lands where `adb pull` saves files (`/sdcard/Download/NekoFlash`), with the same relative/absolute path and folder rules.
 - The live console stays quiet while the file fills; stderr still shows. Progress shows size, elapsed time and speed, and Stop keeps everything captured so far. The final line reports path, size and time.
 - Overwrite is atomic and keeps the previous file on failure; append rolls back to the original length. Raw shell evidence is never moved or deleted. Quote a redirect (`adb shell sh -c 'cmd > /sdcard/x'`) to run it on the target device, as before.
