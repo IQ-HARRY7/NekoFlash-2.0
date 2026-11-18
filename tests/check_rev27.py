@@ -40,7 +40,7 @@ assert 'LocalFileCopy.copy(' in publisher and '.copyTo(' not in publisher
 assert 'source.delete' not in publisher and 'renameTo' not in publisher and 'Files.move' not in publisher
 assert 'setLength(originalLength)' in publisher
 
-# Keep the terminal's Stop action explicit, localized and wired to cancellation.
+# Keep the terminal's Cancel action explicit, localized and wired to cancellation.
 import xml.etree.ElementTree as ET
 ui = ET.parse(root/'app/src/main/res/layout/activity_main.xml').getroot()
 android_ns = '{http://schemas.android.com/apk/res/android}'
