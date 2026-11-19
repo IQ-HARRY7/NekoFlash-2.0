@@ -1,25 +1,28 @@
 # NekoFlash 2.0 — current status
 
-**Updated:** 18 November 2026
+**Updated:** 19 November 2026
 
 ## Signed release
 
-- Release: [v6.0.0-alpha14](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha14)
-- versionCode: `237`
+- Release: [v6.0.0-alpha15](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha15)
+- versionCode: `238`
 - applicationId: `ru.forum.adbfastboottool`
-- Release commit: `39a90aedb7dcdca6a61d7db38c498be2f87959f5`
-- APK SHA-256: `99eb48da0d2642cfa32304b87b471b0ec6e701407bab37bb5b1c01902b9b42cf`
+- Release commit: `ce33b0aba8d1810ef8cbc227e1cb106f2e146f5a`
+- APK SHA-256: `b0e1562921f43adc69a88f73669f98f7fffd0cebe311ea6bb5706ea8e9dfbe8b`
 - Signing certificate SHA-256: `3d9d8ec98ff5a0aa5e72a257f02babe19c0ff91f0af431955aa9afe8901cf5b2`
-- [Release workflow](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44166568661): SUCCESS; published, non-draft, normal/latest release.
-- Exact-commit [main CI](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44166568760): SUCCESS. 434 JVM tests and 58 installed-app tests (29 each on API 26/34), independent ext4/F2FS verification and Android Lint with no findings.
+- [Release workflow](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44412579509): SUCCESS; published, non-draft, normal/latest release.
+- Exact-commit [main CI](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44412580069): SUCCESS. 471 JVM tests and 58 installed-app tests (29 each on API 26/34), independent ext4/F2FS verification and Android Lint with no findings.
 
-Public assets are the signed APK, its SHA-256 file and the required filesystem corresponding-source archive. Alpha11, alpha12 and alpha13 remain available as historical signed releases.
+Public assets are the signed APK, its SHA-256 file and the required filesystem corresponding-source archive. Alpha11 through alpha14 remain available as historical signed releases.
 
 ## Main and public website
+
+PR #103 integrated donor-phone ADB stdout redirection by @IQ-HARRY7, preserving the original contributor commit. PR #104 included the feature in alpha15. A tester APK passed `>` and `>>`, large `logcat` captures and cancellation with partial output over USB OTG from POCO F7 to POCO X3 Pro.
 
 PRs #97–#99 (audit, Settings community links and vector brand icons) and PRs #100–#101 (Xiaomi Unlock diagnostics and completion on the final device response) are merged.
 
 - Public website: [English](https://nekoflash.ncorror.chatgpt.site/) · [Русский](https://nekoflash.ncorror.chatgpt.site/ru/).
+- **Published 19 November:** Site version 9 (source `54ecb0700fcd44b352dec7962fe0470aec421134`) updated the English and Russian download and help pages to alpha15. Static checks passed for all 18 canonical routes and the localized APK, SHA-256 and release links. Native publication returned `succeeded`.
 - **Published 18 November:** Site version 8 (source `c0f32bd24b944ed5de689b3347df661fba71a501`) points EN/RU download and help pages to the verified Alpha14 APK and SHA-256. Both Xiaomi guides describe completion on the final device response without a mandatory return to Fastboot. Static checks passed for all 18 sitemap URLs, canonical URLs, local links and Google verification; native publication returned `succeeded`.
 - **Published 15 November:** Site version 7 (source `56896c9291e1229543cddbb5ee8867351589230d`) points both localized download pages to the verified alpha13 APK and SHA-256.
 - **Published 14 November:** the existing public Site moved to **version 6**, hosting source `307639a924a50751e9cbbbaf71493f6a73e453fb`. The approved banner is the first content below the header. The repeated large promotional headline, eyebrow and introductory paragraph below it have been replaced by a compact download block with a functional heading, APK/GitHub actions, compatibility and release/checksum information. EN/RU narrow layouts and both published home pages were checked. The existing project, public address and audience were preserved; the native publication returned `succeeded`.
