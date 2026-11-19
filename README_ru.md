@@ -5,8 +5,8 @@
 <p align="center"><strong>ADB · Fastboot · Recovery · Sideload</strong><br>Управляй одним Android-телефоном с другого через USB OTG.</p>
 
 <p align="center">
-  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha14/NekoFlash-6.0.0-alpha14.apk"><img src="docs/assets/readme/download-ru.svg" width="196" height="46" alt="Скачать APK"></a>
-  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha14/NekoFlash-6.0.0-alpha14.apk.sha256"><img src="docs/assets/readme/checksum-ru.svg" width="142" height="46" alt="SHA-256"></a>
+  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha15/NekoFlash-6.0.0-alpha15.apk"><img src="docs/assets/readme/download-ru.svg" width="196" height="46" alt="Скачать APK"></a>
+  <a href="https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha15/NekoFlash-6.0.0-alpha15.apk.sha256"><img src="docs/assets/readme/checksum-ru.svg" width="142" height="46" alt="SHA-256"></a>
   <a href="https://github.com/Ncorror/NekoFlash-2.0/releases"><img src="docs/assets/readme/releases-ru.svg" width="170" height="46" alt="Все релизы"></a>
 </p>
 <p align="center">
@@ -17,7 +17,7 @@
 
 <p align="center">Android 8.0+ · USB Host / OTG · Без root на телефоне-хосте<br><a href="README.md">English</a> · <strong>Русский</strong></p>
 
-**Актуальный подписанный релиз:** [6.0.0-alpha14](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha14) · versionCode **237** · [APK, 4,6 МиБ](https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha14/NekoFlash-6.0.0-alpha14.apk)
+**Актуальный подписанный релиз:** [6.0.0-alpha15](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha15) · versionCode **238** · [APK, 4,6 МиБ](https://github.com/Ncorror/NekoFlash-2.0/releases/download/v6.0.0-alpha15/NekoFlash-6.0.0-alpha15.apk)
 
 NekoFlash превращает Android-телефон или планшет в хост для ADB и Fastboot. Прошивай совместимые образы, отправляй ZIP через Recovery, устанавливай APK, передавай файлы и выполняй команды прямо с телефона. Приложение сохраняет полные журналы операций и поддерживает работу с Mi Account и разблокировкой загрузчика Xiaomi.
 
@@ -33,7 +33,7 @@ NekoFlash превращает Android-телефон или планшет в �
 
 | Инструмент | Что доступно |
 | --- | --- |
-| **ADB** | Терминал, установка APK, Push/Pull и диагностика устройства. |
+| **ADB** | Терминал с сохранением stdout в файл на телефоне-хосте (`>` и `>>`), установка APK, Push/Pull и диагностика устройства. |
 | **Fastboot** | Quick Flash, очередь образов Mass Flash, информация о разделах и прямые команды. |
 | **Recovery / Sideload** | Выбор и очистка ZIP; передача запускается отдельной кнопкой. |
 | **Xiaomi** | Вход в Mi Account, управление сессией и сценарий разблокировки загрузчика. |
@@ -70,10 +70,10 @@ Root на телефоне-хосте не требуется. Операции 
 <details>
 <summary>Контрольная сумма APK и состав релиза</summary>
 
-SHA-256 файла `NekoFlash-6.0.0-alpha14.apk`:
+SHA-256 файла `NekoFlash-6.0.0-alpha15.apk`:
 
 ```text
-99eb48da0d2642cfa32304b87b471b0ec6e701407bab37bb5b1c01902b9b42cf
+b0e1562921f43adc69a88f73669f98f7fffd0cebe311ea6bb5706ea8e9dfbe8b
 ```
 
 Релиз содержит подписанный APK, файл `.sha256` и `filesystem-tools-source.tar.gz` — обязательные соответствующие исходники встроенных инструментов файловых систем. Debug/test-артефакты из Actions публикуются отдельно от подписанного релиза.
@@ -83,7 +83,7 @@ SHA-256 файла `NekoFlash-6.0.0-alpha14.apk`:
 <details>
 <summary>Проверки и известные особенности устройств</summary>
 
-Релизный коммит alpha14 прошёл 434 JVM-теста, 58 тестов установленного приложения (по 29 на Android API 26 и 34), независимую проверку ext4/F2FS и Android Lint без замечаний. [Результаты GitHub Actions](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44166568760).
+Релизный коммит alpha15 прошёл 471 JVM-тест, 58 тестов установленного приложения (по 29 на Android API 26 и 34), независимую проверку ext4/F2FS и Android Lint без замечаний. [Результаты GitHub Actions](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/44412580069).
 
 - **POCO X3 Pro / vayu:** Fastboot format/wipe и последующая загрузка Android — FIELD PASS.
 - **X3 Pro host → X3 Pro target:** повторные Pull/Push 128 МиБ с совпадающим SHA-256 — FIELD PASS.
