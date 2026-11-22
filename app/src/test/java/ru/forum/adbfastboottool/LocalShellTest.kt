@@ -73,11 +73,85 @@ class LocalShellTest {
         assertEquals("~", shell.prompt())
     }
 
+
+    @Test fun catAndPipelinesPassOutputBetweenCommands() = withWorkspace { root ->
+        File(root, "flash.log").writeText("INFO start\nERROR boot failed\nINFO done\n")
+        val shell = LocalShell()
+        val workspace: suspend () -> File? = { root }
+
+        val piped = shell.execute("local cat flash.log | grep ERROR", workspace) { false }
+        assertEquals(listOf("ERROR boot failed"), piped?.lines)
+
+        val chained = shell.execute("local echo first && echo second", workspace) { false }
+        assertEquals(listOf("first", "second"), chained?.lines)
+
+        val skipped = shell.execute("local grep MISSING flash.log && echo should-not-run", workspace) { false }
+        assertEquals(listOf("No matches"), skipped?.lines)
+
+        val completedPipeline = shell.execute("local grep MISSING flash.log | cat && echo continued", workspace) { false }
+        assertEquals(listOf("continued"), completedPipeline?.lines)
+    }
+
+    @Test fun clearAndDeviceBinaryPreferenceAreSessionScoped() = runBlocking {
+        val shell = LocalShell()
+        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
+
+        val enabled = shell.execute("export NEKO_USE_DEVICE_BINARIES=1", noWorkspace) { false }
+        assertTrue(enabled?.deviceBinariesEnabled == true)
+        assertTrue(enabled?.lines?.single()?.contains("enabled") == true)
+
+        val clear = shell.execute("clear", noWorkspace) { false }
+        assertTrue(clear?.clearTerminal == true)
+        assertTrue(clear?.deviceBinariesEnabled == true)
+
+        val disabled = shell.execute("export NEKO_USE_DEVICE_BINARIES=0", noWorkspace) { false }
+        assertFalse(disabled?.deviceBinariesEnabled == true)
+    }
+
+    @Test fun removeRequiresConfirmationAndCannotDeleteDirectories() = withWorkspace { root ->
+        val file = File(root, "old.img").apply { writeText("data") }
+        val directory = File(root, "folder").apply { mkdir() }
+        val shell = LocalShell()
+        val workspace: suspend () -> File? = { root }
+
+        val cancelled = shell.execute("local rm old.img", workspace, { false }, { false })
+        assertTrue(file.exists())
+        assertTrue(cancelled?.lines?.single()?.contains("Cancelled") == true)
+
+        val removed = shell.execute("local rm old.img", workspace, { false }, { true })
+        assertFalse(file.exists())
+        assertTrue(removed?.lines?.single()?.contains("Removed") == true)
+
+        val error = runCatching {
+            shell.execute("local rm folder", workspace, { false }, { true })
+        }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(directory.exists())
+    }
+
+    @Test fun operatorsInsideQuotesAreNotParsedAsShellOperators() = runBlocking {
+        val shell = LocalShell()
+        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
+        val output = shell.execute("echo \"a && b | c\"", noWorkspace) { false }
+        assertEquals(listOf("a && b | c"), output?.lines)
+    }
+
     @Test fun terminalRecognizesOnlyLocalPrefixAndBareEcho() {
         assertEquals("ls \"ROM files\"", extractLocalCommand("local ls \"ROM files\""))
         assertEquals("echo hello", extractLocalCommand("echo hello"))
         assertNull(extractLocalCommand("fastboot reboot"))
         assertNull(extractLocalCommand("adb shell ls"))
+        assertEquals("clear", extractLocalCommand("clear"))
+        assertEquals("export NEKO_USE_DEVICE_BINARIES=1", extractLocalCommand("export NEKO_USE_DEVICE_BINARIES=1"))
+    }
+
+
+    @Test fun shellInterpretersRemainUnavailableEvenWithDeviceBinariesEnabled() = runBlocking {
+        val shell = LocalShell()
+        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
+        shell.execute("export NEKO_USE_DEVICE_BINARIES=1", noWorkspace) { false }
+        val result = shell.execute("local sh -c echo", noWorkspace) { false }
+        assertTrue(result?.lines?.single()?.contains("script execution are not available") == true)
     }
 
     @Test fun localTokenizerErrorsDoNotMentionFastboot() = runBlocking {

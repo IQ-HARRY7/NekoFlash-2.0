@@ -668,13 +668,103 @@
                     app:strokeWidth="1dp" />
             </LinearLayout>
 
-            <!-- Единый вывод Console. RecyclerView создаёт только видимые строки,
-                 поэтому длинные ADB/Fastboot-сессии не раздувают один TextView. -->
+            <LinearLayout
+                android:id="@+id/terminalToolbar"
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_below="@id/terminalOperationStatus"
+                android:background="@color/bg_header"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="10dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/terminal_text_label"
+                    android:textColor="@color/text_muted"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnTerminalZoomOut"
+                    android:layout_width="36dp"
+                    android:layout_height="32dp"
+                    android:layout_marginStart="7dp"
+                    android:contentDescription="@string/terminal_zoom_out"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:padding="0dp"
+                    android:text="−"
+                    android:textAllCaps="false"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    app:backgroundTint="@color/bg_card"
+                    app:cornerRadius="8dp" />
+
+                <TextView
+                    android:id="@+id/tvTerminalTextSize"
+                    android:layout_width="42dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="10sp"
+                    android:fontFamily="monospace" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnTerminalZoomIn"
+                    android:layout_width="36dp"
+                    android:layout_height="32dp"
+                    android:contentDescription="@string/terminal_zoom_in"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:padding="0dp"
+                    android:text="+"
+                    android:textAllCaps="false"
+                    android:textColor="@color/text_primary"
+                    android:textSize="17sp"
+                    app:backgroundTint="@color/bg_card"
+                    app:cornerRadius="8dp" />
+
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnTerminalCopy"
+                    android:layout_width="64dp"
+                    android:layout_height="32dp"
+                    android:contentDescription="@string/rev26_terminal_copy"
+                    android:insetLeft="0dp"
+                    android:insetRight="0dp"
+                    android:insetTop="0dp"
+                    android:insetBottom="0dp"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingHorizontal="6dp"
+                    android:text="@string/terminal_copy_short"
+                    android:textAllCaps="true"
+                    android:textColor="@color/accent"
+                    android:textSize="10sp"
+                    app:backgroundTint="@color/bg_card"
+                    app:cornerRadius="8dp" />
+            </LinearLayout>
+
+            <!-- RecyclerView wraps output to the available screen width. -->
             <androidx.recyclerview.widget.RecyclerView
                 android:id="@+id/rvConsoleOutput"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                android:layout_below="@id/terminalOperationStatus"
+                android:layout_below="@id/terminalToolbar"
                 android:layout_above="@id/consoleInputBar"
                 android:clipToPadding="false"
                 android:overScrollMode="ifContentScrolls"

@@ -1,6 +1,10 @@
 package ru.forum.adbfastboottool
 
 import android.view.LayoutInflater
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.style.ForegroundColorSpan
+import android.util.TypedValue
 import android.view.ViewGroup
 import android.widget.TextView
 import androidx.annotation.ColorRes
@@ -23,6 +27,7 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
 
     private val items = ArrayList<Item>()
     private var nextId = 1L
+    private var textSizeSp = 12f
 
     init {
         setHasStableIds(true)
@@ -39,7 +44,7 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
     }
 
     override fun onBindViewHolder(holder: LineViewHolder, position: Int) {
-        holder.bind(items[position])
+        holder.bind(items[position], textSizeSp)
     }
 
     fun replaceAll(lines: List<String>) {
@@ -68,6 +73,11 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
         notifyItemRangeInserted(start, lines.size)
     }
 
+    fun setTextSizeSp(value: Float) {
+        textSizeSp = value.coerceIn(9f, 20f)
+        if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
+    }
+
     private fun newItem(rawLine: String): Item {
         val formatted = CompactLogRenderPolicy.format(rawLine)
         return Item(
@@ -80,11 +90,44 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
     internal class LineViewHolder(
         private val textView: TextView,
     ) : RecyclerView.ViewHolder(textView) {
-        fun bind(item: Item) {
-            textView.text = item.text
-            textView.setTextColor(
-                ContextCompat.getColor(textView.context, item.tone.colorResource()),
-            )
+        fun bind(item: Item, textSizeSp: Float) {
+            val isWelcome = item.text.startsWith("╭─ NEKOFLASH / TERMINAL")
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isWelcome) 12f else textSizeSp)
+            val defaultColor = ContextCompat.getColor(textView.context, item.tone.colorResource())
+            if (isWelcome) {
+                val styled = SpannableString(item.text)
+                var start = 0
+                item.text.splitToSequence('\n').forEach { line ->
+                    val end = start + line.length
+                    val color = when {
+                        line.startsWith("╭") || line.startsWith("╰") || line.contains("DEVICE BINARIES") ||
+                            line.contains("СИСТЕМНЫЕ УТИЛИТЫ") -> R.color.accent
+                        line.contains("local help") -> R.color.log_success
+                        line.contains("export NEKO_USE_DEVICE_BINARIES=1") -> R.color.log_hint
+                        else -> R.color.log_info
+                    }
+                    styled.setSpan(
+                        ForegroundColorSpan(ContextCompat.getColor(textView.context, color)),
+                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                    if (line.startsWith("│") && line.endsWith("│") && line.length > 1) {
+                        val borderColor = ForegroundColorSpan(
+                            ContextCompat.getColor(textView.context, R.color.accent),
+                        )
+                        styled.setSpan(borderColor, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                        styled.setSpan(
+                            ForegroundColorSpan(ContextCompat.getColor(textView.context, R.color.accent)),
+                            end - 1, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                        )
+                    }
+                    start = end + 1
+                }
+                textView.text = styled
+                textView.setTextColor(defaultColor)
+            } else {
+                textView.text = item.text
+                textView.setTextColor(defaultColor)
+            }
         }
     }
 }
