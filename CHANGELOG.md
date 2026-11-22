@@ -8,6 +8,10 @@
 
 ## Unreleased
 
+- Added a local terminal for `Download/NekoFlash`, based on the contribution by **@IQ-HARRY7** in [PR #106](https://github.com/Ncorror/NekoFlash-2.0/pull/106). Use `local help` for commands such as `cat`, `grep`, `mkdir`, `cp`, `mv` and `clear`.
+- Local copies show the bytes transferred. Copy progress, the working directory and pending overwrite prompts survive screen recreation. `local clear` clears the terminal display. The Logs menu can change the terminal text size.
+- The command field shows when input goes to an interactive ADB Shell. The local help and copy controls are available in English and Russian.
+
 ## 6.0.0-alpha15 — 19 November 2026
 
 Donor-side ADB stdout redirection contributed by **@IQ-HARRY7** in PR #102, integrated in PR #103. VersionCode `238`. The original contributor commit and author identity are preserved.

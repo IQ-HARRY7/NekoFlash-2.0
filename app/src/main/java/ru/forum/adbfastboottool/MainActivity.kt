@@ -125,6 +125,9 @@ class MainActivity : AppCompatActivity() {
     private var operationStoredProgressHidden: Boolean = false
     private var operationHiddenProgressFingerprint: String? = null
     private var operationCancelRequested: Boolean = false
+    private var terminalShowsLocalCommand = false
+    private var localOverwriteDialog: androidx.appcompat.app.AlertDialog? = null
+    private var displayedLocalOverwrite: DeviceViewModel.LocalOverwriteRequest? = null
     // Keep completed checkpoint evidence, but do not resurrect its strip after
     // an Activity cold launch (including force-stop and process recreation).
     private var hideRestoredTerminalResultOnColdLaunch: Boolean = false
@@ -259,7 +262,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         rvConsoleOutput = findViewById(R.id.rvConsoleOutput)
-        consoleLogAdapter = ConsoleLogAdapter()
+        val terminalTextSizeSp = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getFloat(PREF_TERMINAL_TEXT_SIZE_SP, TERMINAL_TEXT_SIZE_DEFAULT)
+            .coerceIn(TERMINAL_TEXT_SIZE_MIN, TERMINAL_TEXT_SIZE_MAX)
+        consoleLogAdapter = ConsoleLogAdapter(terminalTextSizeSp)
         rvConsoleOutput.apply {
             layoutManager = LinearLayoutManager(this@MainActivity).apply {
                 stackFromEnd = true
@@ -279,8 +285,13 @@ class MainActivity : AppCompatActivity() {
         ).also { it.initialize() }
         findViewById<View>(R.id.btnConsoleLogs).setOnClickListener { showLogsMenu() }
         findViewById<View>(R.id.btnConsoleClose).setOnClickListener { consoleDockController.collapse() }
-        findViewById<View>(R.id.btnTerminalStop).setOnClickListener { requestOperationCancelFromUi() }
-        findViewById<View>(R.id.terminalOperationStatus).setOnClickListener { openOperationCenter() }
+        findViewById<View>(R.id.btnTerminalStop).setOnClickListener {
+            if (terminalShowsLocalCommand) viewModel.cancelLocalTerminalCommand()
+            else requestOperationCancelFromUi()
+        }
+        findViewById<View>(R.id.terminalOperationStatus).setOnClickListener {
+            if (!terminalShowsLocalCommand) openOperationCenter()
+        }
         savedInstanceState?.getStringArrayList("rev26.terminal.history")?.let { commandHistory.addAll(it) }
         historyIndex = savedInstanceState?.getInt("rev26.terminal.historyIndex", commandHistory.size) ?: commandHistory.size
         tvStatus = findViewById(R.id.tvStatus)
@@ -340,7 +351,10 @@ class MainActivity : AppCompatActivity() {
             updateOperationCenter(lines)
         }
 
-        viewModel.terminalLines.observe(this) { renderLog(it) }
+        viewModel.terminalLines.observe(this) {
+            renderLog(it)
+            updateTerminalInputHint()
+        }
         viewModel.workspaceImport.state.observe(this) { renderWorkspaceImport(it) }
 
         viewModel.connectionState.observe(this) {
@@ -430,6 +444,9 @@ class MainActivity : AppCompatActivity() {
             renderOperationProgressUi(rawProgress)
         }
 
+        viewModel.localTerminalRunning.observe(this) { renderTerminalOperationStatus() }
+        viewModel.localTerminalCopyProgress.observe(this) { renderTerminalOperationStatus() }
+        viewModel.localTerminalOverwrite.observe(this, ::renderLocalOverwrite)
         viewModel.operationSteps.observe(this) { steps -> renderOperationSteps(steps) }
         viewModel.operationProgress.observe(this) { progress ->
             val operationIsActive = viewModel.operationActive.value == true
@@ -1044,6 +1061,11 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        extractLocalCommand(raw)?.let { localLine ->
+            runLocalTerminal(raw, localLine)
+            return
+        }
+
         when (type) {
             "fastboot" -> handleFastbootTerminalCommand(cmd)
             "adb" -> handleAdbTerminalCommand(cmd)
@@ -1110,6 +1132,70 @@ class MainActivity : AppCompatActivity() {
         }
 
         viewModel.sendInteractiveAdbShellInput(shellLine)
+    }
+
+    private fun runLocalTerminal(raw: String, command: String) {
+        if (command == "clear") {
+            viewModel.clearTerminal()
+            return
+        }
+        val quickOutput = try {
+            viewModel.localShell.quickOutput(command, resources.getStringArray(R.array.local_terminal_help).asList())
+        } catch (_: IllegalArgumentException) {
+            viewModel.logLocalTerminal(getString(R.string.local_terminal_invalid_syntax))
+            return
+        }
+        if (quickOutput != null) {
+            viewModel.logLocalTerminal("${viewModel.localShell.prompt()} $raw")
+            quickOutput.lines.forEach(viewModel::logLocalTerminal)
+            return
+        }
+
+        if (!PermissionGate.hasStorage(this)) {
+            viewModel.logLocalTerminal(getString(R.string.local_terminal_workspace_unavailable))
+            showPermissionsDialog()
+            return
+        }
+        if (!::workspacePath.isInitialized || !workspacePath.isDirectory) initWorkspace()
+        if (!ensureWorkspaceReady()) return
+        when (viewModel.submitLocalTerminalCommand(raw, command, workspacePath)) {
+            DeviceViewModel.LocalTerminalAdmission.STARTED -> Unit
+            DeviceViewModel.LocalTerminalAdmission.LOCAL_BUSY -> viewModel.logLocalTerminal(
+                getString(R.string.local_terminal_wait_local, getString(R.string.terminal_stop_button))
+            )
+            DeviceViewModel.LocalTerminalAdmission.USB_BUSY ->
+                viewModel.logLocalTerminal(getString(R.string.local_terminal_wait_usb))
+            DeviceViewModel.LocalTerminalAdmission.WORKSPACE_BUSY ->
+                viewModel.logLocalTerminal(getString(R.string.local_terminal_wait_import))
+        }
+    }
+
+    private fun renderLocalOverwrite(request: DeviceViewModel.LocalOverwriteRequest?) {
+        if (displayedLocalOverwrite === request) return
+        localOverwriteDialog?.dismiss()
+        localOverwriteDialog = null
+        displayedLocalOverwrite = request
+        if (request == null || isFinishing || isDestroyed) return
+
+        localOverwriteDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.local_terminal_replace_title)
+            .setMessage(getString(R.string.local_terminal_replace_message, viewModel.localShell.prompt(request.file)))
+            .setPositiveButton(R.string.local_terminal_replace) { _, _ ->
+                viewModel.answerLocalOverwrite(request, replace = true)
+            }
+            .setNegativeButton(R.string.terminal_stop_button) { _, _ ->
+                viewModel.answerLocalOverwrite(request, replace = false)
+            }
+            .setOnCancelListener { viewModel.answerLocalOverwrite(request, replace = false) }
+            .show()
+    }
+
+    private fun updateTerminalInputHint() {
+        val hint = getString(
+            if (viewModel.isInteractiveAdbShellActive()) R.string.local_terminal_interactive_adb_hint
+            else R.string.layout_command_hint
+        )
+        if (etCommand.hint != hint) etCommand.hint = hint
     }
 
     private fun handleFastbootTerminalCommand(cmd: String) {
@@ -2644,6 +2730,12 @@ class MainActivity : AppCompatActivity() {
             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NekoFlash terminal", viewModel.terminalSnapshot().joinToString("\n")))
             Toast.makeText(this, R.string.rev26_terminal_copied, Toast.LENGTH_SHORT).show()
         }
+        if (consoleLogAdapter.textSizeSp < TERMINAL_TEXT_SIZE_MAX) {
+            actions += getString(R.string.terminal_text_size_increase) to { changeTerminalTextSize(1f) }
+        }
+        if (consoleLogAdapter.textSizeSp > TERMINAL_TEXT_SIZE_MIN) {
+            actions += getString(R.string.terminal_text_size_decrease) to { changeTerminalTextSize(-1f) }
+        }
         if (oldCount > 0) {
             actions += "${getString(R.string.logs_delete_old)} ($oldCount)" to { confirmDeleteOldLogs() }
         }
@@ -2665,6 +2757,14 @@ class MainActivity : AppCompatActivity() {
         }
         dialog.setContentView(root)
         dialog.show()
+    }
+
+    private fun changeTerminalTextSize(delta: Float) {
+        val size = (consoleLogAdapter.textSizeSp + delta).coerceIn(TERMINAL_TEXT_SIZE_MIN, TERMINAL_TEXT_SIZE_MAX)
+        consoleLogAdapter.textSizeSp = size
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+            putFloat(PREF_TERMINAL_TEXT_SIZE_SP, size)
+        }
     }
 
     private fun showCurrentSessionSummaryDialog() {
@@ -4709,6 +4809,31 @@ class MainActivity : AppCompatActivity() {
         updateOperationCenter(viewModel.logSnapshot())
     }
 
+    private fun renderTerminalOperationStatus(
+        active: Boolean = viewModel.operationActive.value == true,
+        progress: DeviceViewModel.OperationProgress? = operationProgressForUi(viewModel.operationProgress.value)
+    ) {
+        terminalShowsLocalCommand = !active && viewModel.localTerminalRunning.value == true
+        val localProgress = viewModel.localTerminalCopyProgress.value
+        findViewById<View>(R.id.terminalOperationStatus).visibility =
+            if (active || terminalShowsLocalCommand) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.tvTerminalOperation).text = when {
+            terminalShowsLocalCommand && localProgress != null -> getString(
+                R.string.local_terminal_copy_progress,
+                HumanReadable.bytes(localProgress.copiedBytes),
+                HumanReadable.bytes(localProgress.totalBytes)
+            )
+            terminalShowsLocalCommand -> getString(R.string.local_terminal_running)
+            operationCancelRequested -> getString(R.string.layout_operation_cancelling_action)
+            else -> progress?.detail?.takeIf { it.isNotBlank() } ?: getString(R.string.layout_operation_center_running)
+        }
+        findViewById<View>(R.id.btnTerminalStop).apply {
+            isEnabled = (active && !operationCancelRequested) || terminalShowsLocalCommand
+            alpha = if (isEnabled) 1f else 0.42f
+        }
+        updateTerminalInputHint()
+    }
+
     private fun updateOperationCenter(lines: List<String>) {
         if (!::tvOperationCenterStatus.isInitialized || !::tvOperationCenterLastEvent.isInitialized) return
         restoreFinishedOperationUiIfNeeded()
@@ -4821,16 +4946,8 @@ class MainActivity : AppCompatActivity() {
         } ?: getString(R.string.layout_operation_center_last_event_empty)
         tvOperationCenterLastEvent.visibility = if (showLastEvent) View.VISIBLE else View.GONE
 
+        renderTerminalOperationStatus(active, effectiveProgress)
         val canRequestCancel = active && !operationCancelRequested
-        findViewById<View>(R.id.terminalOperationStatus).visibility = if (active) View.VISIBLE else View.GONE
-        findViewById<TextView>(R.id.tvTerminalOperation).text = if (operationCancelRequested) {
-            getString(R.string.layout_operation_cancelling_action)
-        } else effectiveProgress?.detail?.takeIf { it.isNotBlank() }
-            ?: getString(R.string.layout_operation_center_running)
-        findViewById<View>(R.id.btnTerminalStop).apply {
-            isEnabled = canRequestCancel
-            alpha = if (canRequestCancel) 1f else 0.42f
-        }
         val cancelButton = cardOperationCenter.findViewById<Button>(R.id.btnOperationCenterCancel)
         cancelButton.isEnabled = canRequestCancel
         cancelButton.text = getString(
@@ -5169,7 +5286,12 @@ class MainActivity : AppCompatActivity() {
         operationCenterDialog = null
         importDialog?.dismiss()
         importDialog = null
-        if (!isChangingConfigurations && viewModelReady) viewModel.workspaceImport.cancel()
+        localOverwriteDialog?.dismiss()
+        localOverwriteDialog = null
+        if (!isChangingConfigurations && viewModelReady) {
+            viewModel.workspaceImport.cancel()
+            viewModel.cancelLocalTerminalCommand()
+        }
         if (!isChangingConfigurations && viewModelReady) {
             viewModel.flushDiagnostics("ACTIVITY_DESTROY", terminal = false)
         }
@@ -5214,6 +5336,10 @@ class MainActivity : AppCompatActivity() {
         private const val MODE_SWITCH_SCAN_INTERVAL_MS = 750L
         private const val MODE_SWITCH_SCAN_ATTEMPTS = 16
         private const val PREFS_NAME = "settings"
+        private const val PREF_TERMINAL_TEXT_SIZE_SP = "terminal_text_size_sp"
+        private const val TERMINAL_TEXT_SIZE_DEFAULT = 12f
+        private const val TERMINAL_TEXT_SIZE_MIN = 9f
+        private const val TERMINAL_TEXT_SIZE_MAX = 20f
         private const val PREF_LANGUAGE_TAG = "language_tag"
         private const val PREF_LAST_WINDOW = "last_window"
         private const val SIDELOAD_SELECTION_PREFS = "sideload_selected_document"

@@ -151,7 +151,7 @@ Not requested:
     <string name="console_logs_button">Logs</string>
     <string name="layout_icon_up">▲</string>
     <string name="layout_icon_down">▼</string>
-    <string name="layout_command_hint">adb shell / adb shell getprop / fastboot getvar all</string>
+    <string name="layout_command_hint">Console · local help / adb shell / fastboot getvar all</string>
     <string name="continue_upper">CONTINUE</string>
 
     <!-- 2.5.1 Classic Recovery UI -->
@@ -170,6 +170,38 @@ Not requested:
     <string name="layout_operation_center_last_event">Latest log entry: %1$s</string>
     <string name="layout_operation_console">Open console</string>
     <string name="terminal_stop_button">Cancel</string>
+    <string name="terminal_text_size_increase">Increase terminal text size (+)</string>
+    <string name="terminal_text_size_decrease">Decrease terminal text size (−)</string>
+    <string name="local_terminal_running">Running local command…</string>
+    <string name="local_terminal_interactive_adb_hint">ADB Shell · input goes to the connected device</string>
+    <string name="local_terminal_copy_progress">Copying %1$s of %2$s</string>
+    <string name="local_terminal_invalid_syntax">Unclosed quote or trailing escape in local command.</string>
+    <string-array name="local_terminal_help">
+        <item>Phone commands include echo, pwd, ls, cd, cat, grep, cp, mv, mkdir and clear.</item>
+        <item>~ points to Download/NekoFlash. Put paths with spaces in quotes.</item>
+        <item>local ls</item>
+        <item>local cd \"ROM files\"</item>
+        <item>local cat \"flash log.txt\"</item>
+        <item>local grep ERROR \"flash log.txt\"</item>
+        <item>local mkdir \"New images\"</item>
+        <item>local cp \"boot image.img\" \"New images\"</item>
+        <item>local clear</item>
+        <item>cp and mv handle individual files and ask before replacing a file.</item>
+    </string-array>
+    <string name="local_terminal_wait_local">A local command is running. Wait for it to finish or tap %1$s.</string>
+    <string name="local_terminal_wait_usb">Wait for the USB operation to finish before running a local command.</string>
+    <string name="local_terminal_wait_import">Wait for the workspace import to finish before running a local command.</string>
+    <string name="local_terminal_usb_blocked">Wait for the local command to finish or cancel it before starting a USB operation.</string>
+    <string name="local_terminal_workspace_unavailable">Workspace unavailable. Check file access and try again.</string>
+    <string name="local_terminal_working_directory">Working directory is %1$s.</string>
+    <string name="local_terminal_milliseconds">%1$d ms</string>
+    <string name="local_terminal_seconds">%1$.2f s</string>
+    <string name="local_terminal_finished">Finished in %1$s.</string>
+    <string name="local_terminal_cancelled">Cancelled after %1$s.</string>
+    <string name="local_terminal_failed">Failed after %1$s. %2$s</string>
+    <string name="local_terminal_replace_title">Replace existing file?</string>
+    <string name="local_terminal_replace_message">A file already exists at %1$s.</string>
+    <string name="local_terminal_replace">Replace</string>
     <string name="layout_operation_cancel">Cancel operation</string>
     <plurals name="layout_operation_steps_more">
         <item quantity="one">… and %1$d more step</item>
@@ -530,7 +562,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
 
     <string name="rev18_history_previous">Previous command</string>
     <string name="rev18_history_next">Next command</string>
-    <string name="rev18_workspace_busy">Wait for the USB operation to finish before clearing its files.</string>
+    <string name="rev18_workspace_busy">Wait for the current operation to finish before clearing the workspace.</string>
     <string name="rev19_fastboot_serial_mismatch">Fastboot -s %1$s: selected device serial is %2$s. Select the matching device; the command was not sent.</string>
     <string name="rev19_sideload_identity_unconfirmed">Sideload result is unconfirmed: the device serial number does not match or is unavailable.</string>
     <string name="rev19_sideload_attempt_unconfirmed">Transfer completed; no verifiable result for this attempt. Check the Recovery screen. For automatic verification, connect to Recovery before entering Sideload.</string>
@@ -567,7 +599,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev26_terminal_completed">Completed.</string>
     <string name="rev26_terminal_copy">Copy terminal output</string>
     <string name="rev26_terminal_copied">Terminal output copied</string>
-    <string name="rev26_import_busy">An import is already running.</string>
+    <string name="rev26_import_busy">Wait for the current workspace operation to finish before importing.</string>
     <string name="rev26_import_cancelled">Import cancelled. Temporary file removed.</string>
     <string name="rev26_import_cancelling">Cancelling and removing temporary data…</string>
     <string name="rev26_import_progress_known">Copied %1$s of %2$s</string>
