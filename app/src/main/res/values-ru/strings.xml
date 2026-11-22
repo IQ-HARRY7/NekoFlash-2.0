@@ -46,46 +46,15 @@
     <string name="battery_optimization_already_disabled">✅ Оптимизация батареи уже отключена для приложения</string>
     <string name="battery_optimization_message">Для долгой прошивки лучше отключить ограничения батареи для этого приложения. Это снижает риск, что Android остановит процесс во время передачи файла.</string>
     <string name="battery_optimization_open_error">ОШИБКА: не удалось открыть настройки батареи: %1$s</string>
-    <string name="system_terminal_ready">┌─ NEKOFLASH / LOCAL TERMINAL ─────────┐
-│ ● HOST · Android-устройство          │
-│ ⌂ ПАПКА · ~ = Download/NekoFlash     │
-├──────────────────────────────────────┤
-│ ◈ НАЧАЛО РАБОТЫ                      │
-│ › local help  Справка по командам    │
-│ echo "OK"    Вывести сообщение       │
-│ clear        Очистить вывод          │
-│ › local pwd  Текущий каталог         │
-│ › local ls   Файлы рабочей папки     │
-│ › local cd "ROM files"               │
-│   cd меняет текущий каталог          │
-├──────────────────────────────────────┤
-│ ◈ ФАЙЛЫ И ТЕКСТ                      │
-│ › local cat "flash.log"              │
-│ › local grep ERROR "flash.log"       │
-│ › local cp boot.img backup/          │
-│ › local mv boot.img images/          │
-│ › local rm old.img                   │
-│   rm запрашивает подтверждение       │
-│   cp / mv: только отдельные файлы    │
-├──────────────────────────────────────┤
-│ ◈ СОСТАВНЫЕ КОМАНДЫ                  │
-│ &amp;&amp;  Следующая команда при успехе     │
-│ |   Передать вывод следующей команде │
-│ echo OK &amp;&amp; ls                        │
-│ cat flash.log | grep ERROR           │
-├──────────────────────────────────────┤
-│ ◈ ИСТОЧНИК КОМАНД                    │
-│ APP  Команды приложения (по умолч.)  │
-│ DEVICE  Утилиты Android (по выбору)  │
+    <string name="system_terminal_ready">╭─ NEKOFLASH / TERMINAL ───────────────╮
+│ РАБОЧАЯ ПАПКА  ~                     │
+│ АЛИАС          Download/NekoFlash    │
+│ СПРАВКА        local help            │
+│ ПО УМОЛЧАНИЮ   Команды приложения    │
+│                                      │
+│ СИСТЕМНЫЕ УТИЛИТЫ (ОПЦИОНАЛЬНО)      │
 │ export NEKO_USE_DEVICE_BINARIES=1    │
-│   Сначала системные утилиты          │
-│   Если нет — fallback приложения     │
-│ export NEKO_USE_DEVICE_BINARIES=0    │
-│   Вернуть команды приложения         │
-│   Root нет; только права приложения  │
-│ Локальные команды выполняются здесь  │
-│   Скрипты / перенаправление: нет     │
-└──────────────────────────────────────┘</string>
+╰──────────────────────────────────────╯</string>
     <string name="security_full_terminal_active">Команды ADB и Fastboot продолжают использовать существующие обработчики.</string>
     <string name="terminal_zoom_out_symbol">−</string>
     <string name="terminal_zoom_in_symbol">+</string>
