@@ -91,8 +91,8 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
         private val textView: TextView,
     ) : RecyclerView.ViewHolder(textView) {
         fun bind(item: Item, textSizeSp: Float) {
-            val isWelcome = item.text.startsWith("╭─ NEKOFLASH / TERMINAL")
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isWelcome) 12f else textSizeSp)
+            val isWelcome = item.text.startsWith("◆ NEKOFLASH • LOCAL TERMINAL") || item.text.startsWith("◆ NEKOFLASH • ЛОКАЛЬНЫЙ ТЕРМИНАЛ")
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
             val defaultColor = ContextCompat.getColor(textView.context, item.tone.colorResource())
             if (isWelcome) {
                 val styled = SpannableString(item.text)
@@ -100,24 +100,19 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
                 item.text.splitToSequence('\n').forEach { line ->
                     val end = start + line.length
                     val color = when {
-                        line.startsWith("╭") || line.startsWith("╰") || line.contains("DEVICE BINARIES") ||
-                            line.contains("СИСТЕМНЫЕ УТИЛИТЫ") -> R.color.accent
-                        line.contains("local help") -> R.color.log_success
-                        line.contains("export NEKO_USE_DEVICE_BINARIES=1") -> R.color.log_hint
-                        else -> R.color.log_info
+                        line.startsWith("◆ NEKOFLASH") -> R.color.terminal_brand
+                        line.startsWith("◆ ") -> R.color.terminal_section
+                        line.startsWith("local ") || line.startsWith("echo ") || line == "clear" -> R.color.terminal_local
+                        line.startsWith("export NEKO_USE_DEVICE_BINARIES") -> R.color.terminal_device
+                        line.startsWith("&&") || line.startsWith("| ") -> R.color.terminal_operator
+                        line.startsWith("App commands") || line.startsWith("Device tools") ||
+                            line.startsWith("Команды приложения") || line.startsWith("Утилиты Android") -> R.color.terminal_device
+                        else -> R.color.terminal_detail
                     }
-                    styled.setSpan(
-                        ForegroundColorSpan(ContextCompat.getColor(textView.context, color)),
-                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                    if (line.startsWith("│") && line.endsWith("│") && line.length > 1) {
-                        val borderColor = ForegroundColorSpan(
-                            ContextCompat.getColor(textView.context, R.color.accent),
-                        )
-                        styled.setSpan(borderColor, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                    if (end > start) {
                         styled.setSpan(
-                            ForegroundColorSpan(ContextCompat.getColor(textView.context, R.color.accent)),
-                            end - 1, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                            ForegroundColorSpan(ContextCompat.getColor(textView.context, color)),
+                            start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
                         )
                     }
                     start = end + 1
