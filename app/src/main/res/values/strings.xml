@@ -46,41 +46,15 @@
     <string name="battery_optimization_already_disabled">✅ Battery optimization is already disabled for the app</string>
     <string name="battery_optimization_message">For long flashing, it is better to disable battery restrictions for this app. This lowers the risk that Android stops the process during file transfer.</string>
     <string name="battery_optimization_open_error">ERROR: could not open battery settings: %1$s</string>
-    <string name="system_terminal_ready">◆ NEKOFLASH • LOCAL TERMINAL
-HOST  Android device
-WORKSPACE  ~
-PATH  Download/NekoFlash
-
-◆ QUICK START
-local help  command reference
-echo OK  print text
-clear  clear transcript
-local pwd  current directory
-local ls  list workspace
-local cd  change directory
-
-◆ FILES &amp; TEXT
-local cat file  read a file
-local grep text file  search
-local cp src dst  copy file
-local mv src dst  move file
-local rm file  confirm deletion
-
-◆ OPERATORS
-&amp;&amp;  continue after success
-|   pass output forward
-echo OK &amp;&amp; local ls
-cat flash.log | local grep ERROR
-
-◆ COMMAND SOURCE
-App commands  default
-Device tools  optional
-export NEKO_USE_DEVICE_BINARIES=1
-Prefer Android tools when available
-Missing tools use app fallback
-export NEKO_USE_DEVICE_BINARIES=0
-Restore app-managed commands
-No root required</string>
+    <string name="system_terminal_ready">╭─ NEKOFLASH / TERMINAL ───────────────╮
+│ WORKSPACE  ~                         │
+│ ALIAS      Download/NekoFlash        │
+│ HELP       local help                │
+│ DEFAULT    App-managed commands      │
+│                                      │
+│ DEVICE BINARIES (OPTIONAL)           │
+│ export NEKO_USE_DEVICE_BINARIES=1    │
+╰──────────────────────────────────────╯</string>
     <string name="security_full_terminal_active">ADB and Fastboot commands continue through their existing handlers.</string>
     <string name="terminal_zoom_out_symbol">−</string>
     <string name="terminal_zoom_in_symbol">+</string>

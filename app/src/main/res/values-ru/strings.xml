@@ -46,41 +46,15 @@
     <string name="battery_optimization_already_disabled">✅ Оптимизация батареи уже отключена для приложения</string>
     <string name="battery_optimization_message">Для долгой прошивки лучше отключить ограничения батареи для этого приложения. Это снижает риск, что Android остановит процесс во время передачи файла.</string>
     <string name="battery_optimization_open_error">ОШИБКА: не удалось открыть настройки батареи: %1$s</string>
-    <string name="system_terminal_ready">◆ NEKOFLASH • ЛОКАЛЬНЫЙ ТЕРМИНАЛ
-HOST  Android device
-WORKSPACE  ~
-PATH  Download/NekoFlash
-
-◆ БЫСТРЫЙ СТАРТ
-local help  справка по командам
-echo OK  вывести текст
-clear  очистить вывод
-local pwd  текущая папка
-local ls  список файлов
-local cd  сменить папку
-
-◆ ФАЙЛЫ И ТЕКСТ
-local cat file  чтение файла
-local grep text file  поиск
-local cp src dst  копирование
-local mv src dst  перемещение
-local rm file  подтверждение удаления
-
-◆ ОПЕРАТОРЫ
-&amp;&amp;  продолжить при успехе
-|   передать вывод дальше
-echo OK &amp;&amp; local ls
-cat flash.log | local grep ERROR
-
-◆ ИСТОЧНИК КОМАНД
-Команды приложения  по умолчанию
-Утилиты Android  опционально
-export NEKO_USE_DEVICE_BINARIES=1
-Использовать системные утилиты
-При отсутствии — команды приложения
-export NEKO_USE_DEVICE_BINARIES=0
-Вернуть команды приложения
-Root не требуется</string>
+    <string name="system_terminal_ready">╭─ NEKOFLASH / TERMINAL ───────────────╮
+│ РАБОЧАЯ ПАПКА  ~                     │
+│ АЛИАС          Download/NekoFlash    │
+│ СПРАВКА        local help            │
+│ ПО УМОЛЧАНИЮ   Команды приложения    │
+│                                      │
+│ СИСТЕМНЫЕ УТИЛИТЫ (ОПЦИОНАЛЬНО)      │
+│ export NEKO_USE_DEVICE_BINARIES=1    │
+╰──────────────────────────────────────╯</string>
     <string name="security_full_terminal_active">Команды ADB и Fastboot продолжают использовать существующие обработчики.</string>
     <string name="terminal_zoom_out_symbol">−</string>
     <string name="terminal_zoom_in_symbol">+</string>
