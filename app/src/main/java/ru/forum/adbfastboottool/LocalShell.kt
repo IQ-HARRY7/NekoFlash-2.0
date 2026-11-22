@@ -95,7 +95,11 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
                     }
                     "grep" -> {
                         require(args.size == 2) { "Usage: local grep TEXT FILE" }
-                        grep(path(args[1]), args[0].value, checkCancelled)
+                        readTextLines(path(args[1]), args[0].value, checkCancelled)
+                    }
+                    "cat" -> {
+                        require(args.size == 1) { "Usage: local cat FILE" }
+                        readTextLines(path(args.single()), null, checkCancelled)
                     }
                     "mkdir" -> {
                         require(args.size == 1) { "Usage: local mkdir DIR" }
@@ -137,13 +141,15 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
         else listed.ifEmpty { listOf("📂 (empty directory)") }
     }
 
-    private fun grep(file: File, query: String, checkCancelled: () -> Unit): List<String> {
+    private fun readTextLines(file: File, query: String?, checkCancelled: () -> Unit): List<String> {
         require(file.isFile) { "Not a file: $file" }
-        val matches = mutableListOf<String>()
+        val lines = mutableListOf<String>()
+        val outputLimit = if (query == null) "… Cat output limit reached." else "… Grep output limit reached."
+        val literal = query.orEmpty()
         var outputChars = 0
         val preview = StringBuilder()
-        val prefixes = literalPrefixes(query)
-        var matched = query.isEmpty()
+        val prefixes = literalPrefixes(literal)
+        var matched = literal.isEmpty()
         var matchedOutsidePreview = false
         var abbreviated = false
         var prefixLength = 0
@@ -151,8 +157,8 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
             if (!matched) return true
             val display = if (!abbreviated) preview.toString() else buildString {
                 if (matchedOutsidePreview) {
-                    val excerpt = query.take(MAX_GREP_PREVIEW_CHARS)
-                    val openingLength = MAX_GREP_PREVIEW_CHARS - excerpt.length
+                    val excerpt = literal.take(MAX_TEXT_PREVIEW_CHARS)
+                    val openingLength = MAX_TEXT_PREVIEW_CHARS - excerpt.length
                     append(preview, 0, openingLength)
                     if (openingLength > 0) append(" … ")
                     append(excerpt)
@@ -161,8 +167,8 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
                 }
                 append(" … [line abbreviated]")
             }
-            if (matches.size == MAX_OUTPUT_LINES || outputChars + display.length > MAX_GREP_OUTPUT_CHARS) return false
-            matches.add(display)
+            if (lines.size == MAX_OUTPUT_LINES || outputChars + display.length > MAX_TEXT_OUTPUT_CHARS) return false
+            lines.add(display)
             outputChars += display.length
             return true
         }
@@ -182,21 +188,21 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
                     }
                     previousWasCr = char == '\r'
                     if (char == '\n' || previousWasCr) {
-                        if (!collectLine()) return matches + GREP_OUTPUT_LIMIT
+                        if (!collectLine()) return lines + outputLimit
                         preview.clear()
-                        matched = query.isEmpty()
+                        matched = literal.isEmpty()
                         matchedOutsidePreview = false
                         abbreviated = false
                         prefixLength = 0
                     } else {
-                        if (preview.length < MAX_GREP_PREVIEW_CHARS) preview.append(char)
+                        if (preview.length < MAX_TEXT_PREVIEW_CHARS) preview.append(char)
                         else abbreviated = true
                         if (!matched) {
-                            while (prefixLength > 0 && char != query[prefixLength]) {
+                            while (prefixLength > 0 && char != literal[prefixLength]) {
                                 prefixLength = prefixes[prefixLength - 1]
                             }
-                            if (char == query[prefixLength]) prefixLength++
-                            if (prefixLength == query.length) {
+                            if (char == literal[prefixLength]) prefixLength++
+                            if (prefixLength == literal.length) {
                                 matched = true
                                 matchedOutsidePreview = abbreviated
                             }
@@ -205,8 +211,8 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
                 }
             }
         }
-        if (preview.isNotEmpty() && !collectLine()) return matches + GREP_OUTPUT_LIMIT
-        return matches.ifEmpty { listOf("🔎 No matches") }
+        if (preview.isNotEmpty() && !collectLine()) return lines + outputLimit
+        return lines.ifEmpty { listOf(if (query == null) "📄 (empty file)" else "🔎 No matches") }
     }
 
     // Keep partial literal matches as the reader advances without retaining complete lines.
@@ -324,15 +330,15 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
 
     private companion object {
         const val MAX_OUTPUT_LINES = 200
-        const val MAX_GREP_PREVIEW_CHARS = 8_192
-        const val MAX_GREP_OUTPUT_CHARS = 65_536
-        const val GREP_OUTPUT_LIMIT = "… Grep output limit reached."
-        val COMMANDS = setOf("pwd", "ls", "cd", "grep", "cp", "mv", "mkdir")
+        const val MAX_TEXT_PREVIEW_CHARS = 8_192
+        const val MAX_TEXT_OUTPUT_CHARS = 65_536
+        val COMMANDS = setOf("pwd", "ls", "cd", "grep", "cat", "cp", "mv", "mkdir")
         val HELP = listOf(
-            "Local commands: echo, pwd, ls, cd, grep, cp, mv, mkdir",
+            "Local commands: echo, pwd, ls, cd, grep, cp, mv, mkdir, cat, clear",
             "local ls",
             "local cd \"ROM files\"",
             "local grep ERROR \"flash log.txt\"",
+            "local cat \"flash log.txt\"",
             "local mkdir \"new folder\"",
             "~ is Download/NekoFlash. File operations stay inside this workspace.",
             "cp/mv handle individual files and ask before replacing an existing file.",

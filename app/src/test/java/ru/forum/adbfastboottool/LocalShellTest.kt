@@ -41,6 +41,7 @@ class LocalShellTest {
         assertEquals(help, shell.quickOutput("another-command", help)?.lines?.drop(1))
         assertEquals(listOf("hello world"), shell.quickOutput("echo \"hello world\"", help)?.lines)
         assertNull(shell.quickOutput("mkdir \"новая папка\"", help))
+        assertNull(shell.quickOutput("cat \"flash log.txt\"", help))
     }
 
     @Test fun quotedPathsCdPwdAndTildeStayInWorkspace() = withWorkspace { root ->
@@ -157,6 +158,27 @@ class LocalShellTest {
         assertTrue(capped.dropLast(1).isNotEmpty())
         assertTrue(capped.dropLast(1).sumOf { it.length } <= 65_536)
         assertTrue(capped.last().contains("output limit reached"))
+    }
+
+    @Test fun catReadsQuotedFileAsLiteralTextAndPreservesBlankLines() = withWorkspace { root ->
+        File(root, "flash log.txt").writeText("Готово | ready\r\n\r\nlast line")
+        val output = newShell().execute("cat \"flash log.txt\"", { root }) { false }
+        assertEquals(listOf("Готово | ready", "", "last line"), output?.lines)
+    }
+
+    @Test fun catReportsAnEmptyFile() = withWorkspace { root ->
+        File(root, "empty.txt").writeText("")
+        assertEquals(listOf("📄 (empty file)"), newShell().execute("cat empty.txt", { root }) { false }?.lines)
+    }
+
+    @Test fun catContinuesAfterAbbreviatingALongLineAndNamesTheOutputLimit() = withWorkspace { root ->
+        File(root, "input.txt").writeText("x".repeat(20_000) + "\nfollowing line\n" + "other line\n".repeat(200))
+        val lines = requireNotNull(newShell().execute("cat input.txt", { root }) { false }).lines
+        assertTrue(lines.first().endsWith("[line abbreviated]"))
+        assertTrue(lines.first().length < 8_300)
+        assertEquals("following line", lines[1])
+        assertEquals(200, lines.dropLast(1).size)
+        assertEquals("… Cat output limit reached.", lines.last())
     }
 
     @Test fun directoryListingCapsNumberOfItems() = withWorkspace { root ->

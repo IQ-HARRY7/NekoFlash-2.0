@@ -218,9 +218,12 @@ class TerminalAndImportAndroidTest {
         val copy = File(fixture, "copy file.img")
         val existing = File(fixture, "existing file.img")
         val moved = File(fixture, "moved file.img")
+        val note = File(fixture, "release notes.txt")
+        val noteLine = "> [Local] Workspace note from cat"
         try {
             source.writeBytes(sourceBytes)
             existing.writeBytes(existingBytes)
+            note.writeText("Workspace note from cat\n")
             ActivityScenario.launch(MainActivity::class.java).use { scenario ->
                 fun run(text: String) = scenario.onActivity { command(it, text) }
                 run("local cd \"${fixture.name}\"")
@@ -259,6 +262,16 @@ class TerminalAndImportAndroidTest {
                     moved.isFile && !copy.exists() && vm().localTerminalRunning.value != true
                 }
                 assertArrayEquals(sourceBytes, moved.readBytes())
+
+                run("local cat \"${note.name}\"")
+                waitUntil("local cat output") {
+                    vm().localTerminalRunning.value != true && vm().terminalSnapshot().contains(noteLine)
+                }
+                scenario.onActivity {
+                    command(it, "local clear")
+                    assertFalse(vm().terminalSnapshot().contains(noteLine))
+                    assertTrue(vm().logSnapshot().contains(noteLine))
+                }
             }
         } finally {
             instrumentation.runOnMainSync { vm().cancelLocalTerminalCommand() }

@@ -262,7 +262,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         rvConsoleOutput = findViewById(R.id.rvConsoleOutput)
-        consoleLogAdapter = ConsoleLogAdapter()
+        val terminalTextSizeSp = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            .getFloat(PREF_TERMINAL_TEXT_SIZE_SP, TERMINAL_TEXT_SIZE_DEFAULT)
+            .coerceIn(TERMINAL_TEXT_SIZE_MIN, TERMINAL_TEXT_SIZE_MAX)
+        consoleLogAdapter = ConsoleLogAdapter(terminalTextSizeSp)
         rvConsoleOutput.apply {
             layoutManager = LinearLayoutManager(this@MainActivity).apply {
                 stackFromEnd = true
@@ -1132,6 +1135,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun runLocalTerminal(raw: String, command: String) {
+        if (command == "clear") {
+            viewModel.clearTerminal()
+            return
+        }
         val quickOutput = try {
             viewModel.localShell.quickOutput(command, resources.getStringArray(R.array.local_terminal_help).asList())
         } catch (_: IllegalArgumentException) {
@@ -2723,6 +2730,12 @@ class MainActivity : AppCompatActivity() {
             clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NekoFlash terminal", viewModel.terminalSnapshot().joinToString("\n")))
             Toast.makeText(this, R.string.rev26_terminal_copied, Toast.LENGTH_SHORT).show()
         }
+        if (consoleLogAdapter.textSizeSp < TERMINAL_TEXT_SIZE_MAX) {
+            actions += getString(R.string.terminal_text_size_increase) to { changeTerminalTextSize(1f) }
+        }
+        if (consoleLogAdapter.textSizeSp > TERMINAL_TEXT_SIZE_MIN) {
+            actions += getString(R.string.terminal_text_size_decrease) to { changeTerminalTextSize(-1f) }
+        }
         if (oldCount > 0) {
             actions += "${getString(R.string.logs_delete_old)} ($oldCount)" to { confirmDeleteOldLogs() }
         }
@@ -2744,6 +2757,14 @@ class MainActivity : AppCompatActivity() {
         }
         dialog.setContentView(root)
         dialog.show()
+    }
+
+    private fun changeTerminalTextSize(delta: Float) {
+        val size = (consoleLogAdapter.textSizeSp + delta).coerceIn(TERMINAL_TEXT_SIZE_MIN, TERMINAL_TEXT_SIZE_MAX)
+        consoleLogAdapter.textSizeSp = size
+        getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
+            putFloat(PREF_TERMINAL_TEXT_SIZE_SP, size)
+        }
     }
 
     private fun showCurrentSessionSummaryDialog() {
@@ -5315,6 +5336,10 @@ class MainActivity : AppCompatActivity() {
         private const val MODE_SWITCH_SCAN_INTERVAL_MS = 750L
         private const val MODE_SWITCH_SCAN_ATTEMPTS = 16
         private const val PREFS_NAME = "settings"
+        private const val PREF_TERMINAL_TEXT_SIZE_SP = "terminal_text_size_sp"
+        private const val TERMINAL_TEXT_SIZE_DEFAULT = 12f
+        private const val TERMINAL_TEXT_SIZE_MIN = 9f
+        private const val TERMINAL_TEXT_SIZE_MAX = 20f
         private const val PREF_LANGUAGE_TAG = "language_tag"
         private const val PREF_LAST_WINDOW = "last_window"
         private const val SIDELOAD_SELECTION_PREFS = "sideload_selected_document"

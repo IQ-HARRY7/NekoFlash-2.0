@@ -14,7 +14,7 @@ import androidx.recyclerview.widget.RecyclerView
  * the visible portion of a long session. The adapter keeps stable IDs and
  * exposes narrow mutation methods used by MainActivity's batched renderer.
  */
-internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineViewHolder>() {
+internal class ConsoleLogAdapter(initialTextSizeSp: Float) : RecyclerView.Adapter<ConsoleLogAdapter.LineViewHolder>() {
     internal data class Item(
         val id: Long,
         val text: String,
@@ -23,6 +23,12 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
 
     private val items = ArrayList<Item>()
     private var nextId = 1L
+    var textSizeSp = initialTextSizeSp
+        set(value) {
+            if (field == value) return
+            field = value
+            if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
+        }
 
     init {
         setHasStableIds(true)
@@ -39,7 +45,7 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
     }
 
     override fun onBindViewHolder(holder: LineViewHolder, position: Int) {
-        holder.bind(items[position])
+        holder.bind(items[position], textSizeSp)
     }
 
     fun replaceAll(lines: List<String>) {
@@ -80,7 +86,8 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
     internal class LineViewHolder(
         private val textView: TextView,
     ) : RecyclerView.ViewHolder(textView) {
-        fun bind(item: Item) {
+        fun bind(item: Item, textSizeSp: Float) {
+            textView.textSize = textSizeSp
             textView.text = item.text
             textView.setTextColor(
                 ContextCompat.getColor(textView.context, item.tone.colorResource()),

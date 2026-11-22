@@ -170,18 +170,22 @@ Not requested:
     <string name="layout_operation_center_last_event">Latest log entry: %1$s</string>
     <string name="layout_operation_console">Open console</string>
     <string name="terminal_stop_button">Cancel</string>
+    <string name="terminal_text_size_increase">Increase terminal text size (+)</string>
+    <string name="terminal_text_size_decrease">Decrease terminal text size (−)</string>
     <string name="local_terminal_running">Running local command…</string>
     <string name="local_terminal_interactive_adb_hint">ADB Shell · input goes to the connected device</string>
     <string name="local_terminal_copy_progress">Copying %1$s of %2$s</string>
     <string name="local_terminal_invalid_syntax">Unclosed quote or trailing escape in local command.</string>
     <string-array name="local_terminal_help">
-        <item>Phone commands include echo, pwd, ls, cd, grep, cp, mv and mkdir.</item>
+        <item>Phone commands include echo, pwd, ls, cd, cat, grep, cp, mv, mkdir and clear.</item>
         <item>~ points to Download/NekoFlash. Put paths with spaces in quotes.</item>
         <item>local ls</item>
         <item>local cd \"ROM files\"</item>
+        <item>local cat \"flash log.txt\"</item>
         <item>local grep ERROR \"flash log.txt\"</item>
         <item>local mkdir \"New images\"</item>
         <item>local cp \"boot image.img\" \"New images\"</item>
+        <item>local clear</item>
         <item>cp and mv handle individual files and ask before replacing a file.</item>
     </string-array>
     <string name="local_terminal_wait_local">A local command is running. Wait for it to finish or tap %1$s.</string>
