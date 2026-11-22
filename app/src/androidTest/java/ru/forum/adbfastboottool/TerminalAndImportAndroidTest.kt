@@ -363,11 +363,14 @@ class TerminalAndImportAndroidTest {
     }
 
     @Test fun commandsAfterRotationRenderInTheBodyAndKeepTheExpandedHeader() {
+        // Use a parser-level Fastboot error. Unknown Fastboot commands are
+        // forwarded as raw wire commands and correctly require a USB device,
+        // while this UI test intentionally runs without one.
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { it.findViewById<View>(R.id.btnTerminalOpen).performClick() }
             waitUi(scenario, "terminal initially expanded") { expanded(it) }
             showCommandIme(scenario)
-            scenario.onActivity { command(it, "fastboot до_поворота49") }
+            scenario.onActivity { command(it, "fastboot -S invalid_до_поворота49 getvar product") }
             checkRenderedCommand(scenario, "до_поворота49")
 
             // Keep IME open while rotating, then send through the normal Send
@@ -378,7 +381,7 @@ class TerminalAndImportAndroidTest {
                 it.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE && expanded(it)
             }
             showCommandIme(scenario)
-            scenario.onActivity { command(it, "fastboot горизонталь49") }
+            scenario.onActivity { command(it, "fastboot -S invalid_горизонталь49 getvar product") }
             checkRenderedCommand(scenario, "горизонталь49")
             AndroidUiCapture.save(scenario, "terminal-rotated-command-landscape.png")
 
@@ -388,10 +391,10 @@ class TerminalAndImportAndroidTest {
                 it.resources.configuration.orientation == Configuration.ORIENTATION_PORTRAIT && expanded(it)
             }
             showCommandIme(scenario)
-            scenario.onActivity { command(it, "fastboot портрет49") }
+            scenario.onActivity { command(it, "fastboot -S invalid_портрет49 getvar product") }
             checkRenderedCommand(scenario, "портрет49")
             scenario.recreate()
-            scenario.onActivity { command(it, "fastboot пересоздание49") }
+            scenario.onActivity { command(it, "fastboot -S invalid_пересоздание49 getvar product") }
             checkRenderedCommand(scenario, "пересоздание49")
             AndroidUiCapture.save(scenario, "terminal-rotated-command-portrait.png")
 
@@ -413,7 +416,7 @@ class TerminalAndImportAndroidTest {
                 val parent = activity.findViewById<CoordinatorLayout>(R.id.rootCoordinator)
                 BottomSheetBehavior.from(panel).onRestoreInstanceState(parent, panel, requireNotNull(savedSheet))
                 activity.findViewById<View>(R.id.btnTerminalOpen).performClick()
-                command(activity, "fastboot восстановление49")
+                command(activity, "fastboot -S invalid_восстановление49 getvar product")
             }
             checkRenderedCommand(scenario, "восстановление49")
         }
