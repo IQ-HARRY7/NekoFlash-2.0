@@ -54,7 +54,7 @@ PATH  Download/NekoFlash
 ◆ QUICK START
 local help  command reference
 echo OK  print text
-clear transcript
+clear  clear transcript
 local pwd  current directory
 local ls  list workspace
 local cd  change directory
