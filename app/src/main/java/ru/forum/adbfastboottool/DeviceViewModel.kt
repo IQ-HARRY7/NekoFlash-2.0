@@ -13,6 +13,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.core.content.edit
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -50,6 +51,10 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     enum class OperationOutcomeKind { SUCCESS, FAILED, CANCELLED, VERIFY_PENDING, INTERRUPTED }
 
     internal enum class LocalTerminalAdmission { STARTED, LOCAL_BUSY, USB_BUSY, WORKSPACE_BUSY }
+
+    internal data class LocalCopyProgress(val copiedBytes: Long, val totalBytes: Long)
+
+    internal class LocalOverwriteRequest(val file: File)
 
     sealed class OperationOutcome {
         object Success : OperationOutcome()
@@ -101,6 +106,10 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     internal val localShell = LocalShell()
     private val _localTerminalRunning = MutableLiveData(false)
     val localTerminalRunning: LiveData<Boolean> = _localTerminalRunning
+    private val _localTerminalCopyProgress = MutableLiveData<LocalCopyProgress?>(null)
+    internal val localTerminalCopyProgress: LiveData<LocalCopyProgress?> = _localTerminalCopyProgress
+    private val _localTerminalOverwrite = MutableLiveData<LocalOverwriteRequest?>(null)
+    internal val localTerminalOverwrite: LiveData<LocalOverwriteRequest?> = _localTerminalOverwrite
 
     internal fun importWorkspaceFile(uri: android.net.Uri, workspace: File): Boolean = synchronized(operationLaunchLock) {
         if (viewModelCleared.get() || localTerminalOperation != null) false else workspaceImport.start(uri, workspace)
@@ -339,6 +348,9 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private val operationLaunchLock = Any()
     private data class LocalTerminalOperation(val job: Job, val cancellation: ImportCancellation)
     private var localTerminalOperation: LocalTerminalOperation? = null
+    private val localTerminalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private data class LocalOverwriteConfirmation(val request: LocalOverwriteRequest, val answer: CompletableDeferred<Boolean>)
+    private var localOverwriteConfirmation: LocalOverwriteConfirmation? = null
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val transportTransitionMutex = Mutex()
@@ -1221,6 +1233,75 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         mainHandler.post(block)
     }
 
+    internal fun logLocalTerminal(message: String) = log("> [Local] $message")
+
+    internal fun submitLocalTerminalCommand(raw: String, command: String, workspace: File): LocalTerminalAdmission =
+        launchLocalTerminalCommand(localTerminalScope) { cancellation ->
+            logLocalTerminal("${localShell.prompt()} $raw")
+            val startedAt = SystemClock.elapsedRealtime()
+            var lastProgressAt: Long? = null
+            fun elapsed(): String {
+                val milliseconds = SystemClock.elapsedRealtime() - startedAt
+                return if (milliseconds < 1_000L) text(R.string.local_terminal_milliseconds, milliseconds)
+                else text(R.string.local_terminal_seconds, milliseconds / 1_000.0)
+            }
+
+            try {
+                val output = localShell.execute(
+                    line = command,
+                    workspace = { workspace },
+                    cancellation = cancellation,
+                    onCopyProgress = { copiedBytes, totalBytes ->
+                        val now = SystemClock.elapsedRealtime()
+                        val previous = lastProgressAt
+                        if (previous == null || now - previous >= 100L || copiedBytes == totalBytes) {
+                            _localTerminalCopyProgress.postValue(LocalCopyProgress(copiedBytes, totalBytes))
+                            lastProgressAt = now
+                        }
+                    },
+                    confirmOverwrite = ::requestLocalOverwrite
+                )
+                when {
+                    output == null -> logLocalTerminal(text(R.string.local_terminal_workspace_unavailable))
+                    output.lines.isEmpty() -> logLocalTerminal(
+                        text(R.string.local_terminal_working_directory, localShell.prompt(output.directory))
+                    )
+                    else -> output.lines.forEach(::logLocalTerminal)
+                }
+                if (output != null) logLocalTerminal(text(R.string.local_terminal_finished, elapsed()))
+            } catch (cancelled: CancellationException) {
+                logLocalTerminal(text(R.string.local_terminal_cancelled, elapsed()))
+                throw cancelled
+            } catch (error: Exception) {
+                logLocalTerminal(text(R.string.local_terminal_failed, elapsed(), error.message ?: error.javaClass.simpleName))
+            }
+        }
+
+    private suspend fun requestLocalOverwrite(file: File): Boolean {
+        val confirmation = LocalOverwriteConfirmation(LocalOverwriteRequest(file), CompletableDeferred())
+        synchronized(operationLaunchLock) {
+            localOverwriteConfirmation = confirmation
+            _localTerminalOverwrite.postValue(confirmation.request)
+        }
+        return try {
+            confirmation.answer.await()
+        } finally {
+            synchronized(operationLaunchLock) {
+                if (localOverwriteConfirmation === confirmation) {
+                    localOverwriteConfirmation = null
+                    _localTerminalOverwrite.postValue(null)
+                }
+            }
+        }
+    }
+
+    internal fun answerLocalOverwrite(request: LocalOverwriteRequest, replace: Boolean) {
+        val confirmation = synchronized(operationLaunchLock) {
+            localOverwriteConfirmation?.takeIf { it.request === request }
+        }
+        confirmation?.answer?.complete(replace)
+    }
+
     internal fun launchLocalTerminalCommand(
         scope: CoroutineScope,
         block: suspend (ImportCancellation) -> Unit
@@ -1242,6 +1323,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     // Keep the reservation through cancellation and temporary-file cleanup.
                     if (localTerminalOperation === local) {
                         localTerminalOperation = null
+                        _localTerminalCopyProgress.postValue(null)
                         _localTerminalRunning.postValue(false)
                     }
                 }
@@ -2508,6 +2590,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     override fun onCleared() {
         viewModelCleared.set(true)
         cancelLocalTerminalCommand()
+        localTerminalScope.cancel()
         workspaceImport.close()
         mainHandler.removeCallbacksAndMessages(null)
         flushDiagnostics("VIEWMODEL_CLEARED", terminal = true)

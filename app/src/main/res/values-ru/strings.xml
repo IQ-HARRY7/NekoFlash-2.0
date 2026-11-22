@@ -151,7 +151,7 @@
     <string name="console_logs_button">Логи</string>
     <string name="layout_icon_up">▲</string>
     <string name="layout_icon_down">▼</string>
-    <string name="layout_command_hint">adb shell / fastboot getvar all / local help</string>
+    <string name="layout_command_hint">Консоль · local help / adb shell / fastboot getvar all</string>
     <string name="continue_upper">ПРОДОЛЖИТЬ</string>
 
     <!-- 2.5.1 Classic Recovery UI -->
@@ -171,6 +171,19 @@
     <string name="layout_operation_console">Открыть консоль</string>
     <string name="terminal_stop_button">Отмена</string>
     <string name="local_terminal_running">Выполняется локальная команда…</string>
+    <string name="local_terminal_interactive_adb_hint">ADB Shell · ввод отправляется на подключённое устройство</string>
+    <string name="local_terminal_copy_progress">Скопировано %1$s из %2$s</string>
+    <string name="local_terminal_invalid_syntax">В локальной команде осталась незакрытая кавычка или обратная косая черта в конце.</string>
+    <string-array name="local_terminal_help">
+        <item>Команды на телефоне-хосте — echo, pwd, ls, cd, grep, cp, mv и mkdir.</item>
+        <item>~ указывает на Download/NekoFlash. Пути с пробелами заключайте в кавычки.</item>
+        <item>local ls</item>
+        <item>local cd \"Мои образы\"</item>
+        <item>local grep ERROR \"журнал прошивки.txt\"</item>
+        <item>local mkdir \"Новые образы\"</item>
+        <item>local cp \"boot образ.img\" \"Новые образы\"</item>
+        <item>cp и mv работают с отдельными файлами и спрашивают подтверждение перед заменой.</item>
+    </string-array>
     <string name="local_terminal_wait_local">Локальная команда уже выполняется. Дождитесь завершения или нажмите «%1$s».</string>
     <string name="local_terminal_wait_usb">Дождитесь завершения USB-операции перед запуском локальной команды.</string>
     <string name="local_terminal_wait_import">Дождитесь завершения импорта файлов перед запуском локальной команды.</string>

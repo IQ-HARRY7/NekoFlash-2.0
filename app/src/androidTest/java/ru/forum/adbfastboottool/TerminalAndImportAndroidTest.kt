@@ -13,6 +13,7 @@ import android.text.Spannable
 import android.text.Selection
 import android.net.Uri
 import android.os.Build
+import android.os.Environment
 import android.os.LocaleList
 import android.provider.Settings
 import android.view.KeyEvent
@@ -35,6 +36,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 import com.google.android.material.bottomsheet.BottomSheetDialog
 import java.io.File
+import java.nio.file.Files
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -192,6 +194,76 @@ class TerminalAndImportAndroidTest {
             }
         } finally {
             prefs.edit().putString("last_window", previousWindow).commit()
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    @Test fun localWorkspaceCommandsPreserveFilesAndDirectoryAcrossRecreation() {
+        if (!PermissionGate.hasStorage(context)) {
+            val packageName = context.packageName
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                shell("appops set --uid $packageName MANAGE_EXTERNAL_STORAGE allow")
+            } else {
+                shell("pm grant $packageName android.permission.READ_EXTERNAL_STORAGE")
+                shell("pm grant $packageName android.permission.WRITE_EXTERNAL_STORAGE")
+            }
+        }
+        waitUntil("workspace storage access") { PermissionGate.hasStorage(context) }
+        val downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+        val sharedWorkspace = File(downloads, "NekoFlash").apply { mkdirs() }
+        val fixture = Files.createTempDirectory(sharedWorkspace.toPath(), "local-terminal-").toFile()
+        val sourceBytes = ByteArray(4_096) { (it * 13).toByte() }
+        val existingBytes = byteArrayOf(11, 22, 33)
+        val source = File(fixture, "source file.img")
+        val copy = File(fixture, "copy file.img")
+        val existing = File(fixture, "existing file.img")
+        val moved = File(fixture, "moved file.img")
+        try {
+            source.writeBytes(sourceBytes)
+            existing.writeBytes(existingBytes)
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                fun run(text: String) = scenario.onActivity { command(it, text) }
+                run("local cd \"${fixture.name}\"")
+                waitUntil("local cd completed") {
+                    vm().localTerminalRunning.value != true &&
+                        vm().terminalSnapshot().any { it.contains("~/${fixture.name}") }
+                }
+
+                run("local cp \"${source.name}\" \"${copy.name}\"")
+                waitUntil("local cp published") { copy.isFile && vm().localTerminalRunning.value != true }
+                assertArrayEquals(sourceBytes, copy.readBytes())
+
+                run("local cp \"${source.name}\" \"${existing.name}\"")
+                waitUi(scenario, "overwrite confirmation") {
+                    (field(it, "localOverwriteDialog") as? AlertDialog)?.isShowing == true
+                }
+                scenario.recreate()
+                waitUi(scenario, "restored overwrite confirmation") {
+                    (field(it, "localOverwriteDialog") as? AlertDialog)?.isShowing == true
+                }
+                scenario.onActivity {
+                    (field(it, "localOverwriteDialog") as AlertDialog)
+                        .getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
+                }
+                waitUntil("local overwrite declined") { vm().localTerminalRunning.value != true }
+                assertArrayEquals(existingBytes, existing.readBytes())
+                assertArrayEquals(sourceBytes, source.readBytes())
+
+                run("local pwd")
+                waitUntil("retained working directory") {
+                    vm().localTerminalRunning.value != true &&
+                        vm().terminalSnapshot().contains("> [Local] ${fixture.canonicalPath}")
+                }
+                run("local mv \"${copy.name}\" \"${moved.name}\"")
+                waitUntil("local mv published") {
+                    moved.isFile && !copy.exists() && vm().localTerminalRunning.value != true
+                }
+                assertArrayEquals(sourceBytes, moved.readBytes())
+            }
+        } finally {
+            instrumentation.runOnMainSync { vm().cancelLocalTerminalCommand() }
+            waitUntil("workspace command cleanup") { vm().localTerminalRunning.value != true }
+            fixture.deleteRecursively()
         }
     }
 

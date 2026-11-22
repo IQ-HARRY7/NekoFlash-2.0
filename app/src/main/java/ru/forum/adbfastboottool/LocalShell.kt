@@ -28,10 +28,29 @@ internal class LocalShell {
         return if (relative.isEmpty()) "~" else "~/$relative"
     }
 
+    fun quickOutput(line: String, help: List<String> = HELP): Output? = quickOutput(tokenize(line), help)
+
+    private fun tokenize(line: String): List<FastbootCommandLine.Token> = try {
+        FastbootCommandLine.tokenize(line)
+    } catch (error: IllegalArgumentException) {
+        throw IllegalArgumentException("Unclosed quote or trailing escape in local command", error)
+    }
+
+    private fun quickOutput(words: List<FastbootCommandLine.Token>, help: List<String>): Output? {
+        val command = words.firstOrNull()?.value.orEmpty()
+        return when (command) {
+            "echo" -> Output(cwd, listOf(words.drop(1).joinToString(" ") { it.value }))
+            "", "help" -> Output(cwd, help)
+            in COMMANDS -> null
+            else -> Output(cwd, listOf("Unknown local command: $command") + help)
+        }
+    }
+
     suspend fun execute(
         line: String,
         workspace: suspend () -> File?,
         cancellation: ImportCancellation = ImportCancellation(),
+        onCopyProgress: (copied: Long, total: Long) -> Unit = { _, _ -> },
         confirmOverwrite: suspend (File) -> Boolean
     ): Output? = lock.withLock {
         var committedOutput: Output? = null
@@ -43,18 +62,10 @@ internal class LocalShell {
                     cancellation.check()
                 }
                 checkCancelled()
-                val words = try {
-                    FastbootCommandLine.tokenize(line)
-                } catch (error: IllegalArgumentException) {
-                    throw IllegalArgumentException("Unclosed quote or trailing escape in local command", error)
-                }
-                val command = words.firstOrNull()?.value.orEmpty()
+                val words = tokenize(line)
+                quickOutput(words, HELP)?.let { return@withContext it }
+                val command = words.first().value
                 val args = words.drop(1)
-                if (command == "echo") return@withContext Output(cwd, listOf(args.joinToString(" ") { it.value }))
-                if (command == "help" || command.isEmpty()) return@withContext Output(cwd, HELP)
-                if (command !in COMMANDS) {
-                    return@withContext Output(cwd, listOf("Unknown local command: $command", *HELP.toTypedArray()))
-                }
 
                 val root = workspace()?.canonicalFile ?: return@withContext null
                 checkCancelled()
@@ -86,16 +97,28 @@ internal class LocalShell {
                         require(args.size == 2) { "Usage: local grep TEXT FILE" }
                         grep(path(args[1]), args[0].value, checkCancelled)
                     }
+                    "mkdir" -> {
+                        require(args.size == 1) { "Usage: local mkdir DIR" }
+                        val folder = path(args.single())
+                        requireMutablePath(root, folder)
+                        val output = Output(cwd, listOf("✅ Created directory: ${folder.path}"))
+                        cancellation.commit {
+                            checkCancelled()
+                            Files.createDirectory(folder.toPath())
+                        }
+                        committedOutput = output
+                        return@withContext output
+                    }
                     else -> {
                         require(args.size == 2) { "Usage: local $command SOURCE DEST" }
                         return@withContext transfer(command == "mv", root, path(args[0]), path(args[1]),
-                            cancellation, checkCancelled, confirmOverwrite) { committedOutput = it }
+                            cancellation, checkCancelled, onCopyProgress, confirmOverwrite) { committedOutput = it }
                     }
                 }
                 Output(cwd, lines)
             }
         } catch (cancelled: CancellationException) {
-            // A late coroutine cancellation can discard withContext's result after a file move.
+            // A late coroutine cancellation can discard withContext's result after a workspace change.
             committedOutput ?: throw cancelled
         }
     }
@@ -118,12 +141,29 @@ internal class LocalShell {
         require(file.isFile) { "Not a file: $file" }
         val matches = mutableListOf<String>()
         var outputChars = 0
-        val line = StringBuilder()
+        val preview = StringBuilder()
+        val prefixes = literalPrefixes(query)
+        var matched = query.isEmpty()
+        var matchedOutsidePreview = false
+        var abbreviated = false
+        var prefixLength = 0
         fun collectLine(): Boolean {
-            if (!line.contains(query)) return true
-            if (matches.size == MAX_OUTPUT_LINES || outputChars + line.length > MAX_GREP_OUTPUT_CHARS) return false
-            matches.add(line.toString())
-            outputChars += line.length
+            if (!matched) return true
+            val display = if (!abbreviated) preview.toString() else buildString {
+                if (matchedOutsidePreview) {
+                    val excerpt = query.take(MAX_GREP_PREVIEW_CHARS)
+                    val openingLength = MAX_GREP_PREVIEW_CHARS - excerpt.length
+                    append(preview, 0, openingLength)
+                    if (openingLength > 0) append(" … ")
+                    append(excerpt)
+                } else {
+                    append(preview)
+                }
+                append(" … [line abbreviated]")
+            }
+            if (matches.size == MAX_OUTPUT_LINES || outputChars + display.length > MAX_GREP_OUTPUT_CHARS) return false
+            matches.add(display)
+            outputChars += display.length
             return true
         }
 
@@ -143,18 +183,42 @@ internal class LocalShell {
                     previousWasCr = char == '\r'
                     if (char == '\n' || previousWasCr) {
                         if (!collectLine()) return matches + GREP_OUTPUT_LIMIT
-                        line.clear()
+                        preview.clear()
+                        matched = query.isEmpty()
+                        matchedOutsidePreview = false
+                        abbreviated = false
+                        prefixLength = 0
                     } else {
-                        if (line.length == MAX_GREP_LINE_CHARS) {
-                            return matches + "… Grep stopped at a line longer than $MAX_GREP_LINE_CHARS characters."
+                        if (preview.length < MAX_GREP_PREVIEW_CHARS) preview.append(char)
+                        else abbreviated = true
+                        if (!matched) {
+                            while (prefixLength > 0 && char != query[prefixLength]) {
+                                prefixLength = prefixes[prefixLength - 1]
+                            }
+                            if (char == query[prefixLength]) prefixLength++
+                            if (prefixLength == query.length) {
+                                matched = true
+                                matchedOutsidePreview = abbreviated
+                            }
                         }
-                        line.append(char)
                     }
                 }
             }
         }
-        if (line.isNotEmpty() && !collectLine()) return matches + GREP_OUTPUT_LIMIT
+        if (preview.isNotEmpty() && !collectLine()) return matches + GREP_OUTPUT_LIMIT
         return matches.ifEmpty { listOf("🔎 No matches") }
+    }
+
+    // Keep partial literal matches as the reader advances without retaining complete lines.
+    private fun literalPrefixes(query: String): IntArray {
+        val prefixes = IntArray(query.length)
+        for (index in 1 until query.length) {
+            var length = prefixes[index - 1]
+            while (length > 0 && query[index] != query[length]) length = prefixes[length - 1]
+            if (query[index] == query[length]) length++
+            prefixes[index] = length
+        }
+        return prefixes
     }
 
     private suspend fun transfer(
@@ -164,12 +228,14 @@ internal class LocalShell {
         destination: File,
         cancellation: ImportCancellation,
         checkCancelled: () -> Unit,
+        onCopyProgress: (Long, Long) -> Unit,
         confirmOverwrite: suspend (File) -> Boolean,
         onCommitted: (Output) -> Unit
     ): Output {
         require(source.isFile) { "Not a file: $source" }
         val target = if (destination.isDirectory) inside(root, File(destination, source.name)) else destination
-        require(target.parentFile?.isDirectory == true) { "Destination folder does not exist: $target" }
+        val targetDirectory = target.parentFile?.takeIf { it.isDirectory }
+            ?: throw IllegalArgumentException("Destination folder does not exist: $target")
         if (move) requireMutablePath(root, source)
         requireMutablePath(root, target)
         val before = attributes(target)
@@ -187,15 +253,15 @@ internal class LocalShell {
         val staged = if (move) source else FilePublication.temporarySibling(target)
         try {
             if (!move) {
-                source.inputStream().buffered().use { input ->
-                    staged.outputStream().buffered().use { output ->
-                        val buffer = ByteArray(64 * 1024)
-                        while (true) {
-                            checkCancelled()
-                            val count = input.read(buffer)
-                            if (count < 0) break
-                            output.write(buffer, 0, count)
-                        }
+                source.inputStream().use { input ->
+                    val size = input.channel.size()
+                    onCopyProgress(0L, size)
+                    staged.outputStream().use { output ->
+                        LocalFileCopy.copy(
+                            input, output, targetDirectory, size, checkCancelled,
+                            onProgress = { copied -> onCopyProgress(copied, size) },
+                            availableSpace = { it.usableSpace }
+                        )
                     }
                 }
             }
@@ -258,13 +324,16 @@ internal class LocalShell {
 
     private companion object {
         const val MAX_OUTPUT_LINES = 200
-        const val MAX_GREP_LINE_CHARS = 8_192
+        const val MAX_GREP_PREVIEW_CHARS = 8_192
         const val MAX_GREP_OUTPUT_CHARS = 65_536
         const val GREP_OUTPUT_LIMIT = "… Grep output limit reached."
-        val COMMANDS = setOf("pwd", "ls", "cd", "grep", "cp", "mv")
+        val COMMANDS = setOf("pwd", "ls", "cd", "grep", "cp", "mv", "mkdir")
         val HELP = listOf(
-            "Local commands: echo, pwd, ls, cd, grep, cp, mv",
-            "Use: local ls | local cd \"ROM files\" | local grep ERROR \"flash log.txt\"",
+            "Local commands: echo, pwd, ls, cd, grep, cp, mv, mkdir",
+            "local ls",
+            "local cd \"ROM files\"",
+            "local grep ERROR \"flash log.txt\"",
+            "local mkdir \"new folder\"",
             "~ is Download/NekoFlash. File operations stay inside this workspace.",
             "cp/mv handle individual files and ask before replacing an existing file.",
             "Logs and NekoFlash staging files cannot be moved or overwritten."

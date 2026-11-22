@@ -46,7 +46,9 @@ mi_unlock_diagnostics_vm_blob = 'f408c6b03977b508de737183feaae869722a50bb'
 rev59_shell_redirect_vm_blob = '90bb79853e6221d20b9006477175c4ed35fa2e33'
 # Local terminal commands share admission with USB and workspace operations.
 local_terminal_vm_blob = 'f729ec96acd1b48a069df24390acf8dd8cde67e9'
-shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob)
+# Local copies and overwrite confirmation survive an Activity configuration change.
+retained_local_terminal_vm_blob = 'ae4de2700cc0c2b3473ff7bd3bef7fa68bb1f811'
+shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):

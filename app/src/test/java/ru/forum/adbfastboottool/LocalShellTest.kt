@@ -31,6 +31,16 @@ class LocalShellTest {
         assertTrue(help?.lines?.any { it.contains("echo, pwd, ls, cd, grep, cp, mv") } == true)
     }
 
+    @Test fun quickOutputUsesLocalizedHelpAndLeavesFileCommandsToTheWorker() {
+        val shell = LocalShell()
+        val help = listOf("Справка по локальным командам", "local mkdir \"новая папка\"")
+        assertEquals(help, shell.quickOutput("help", help)?.lines)
+        assertEquals(help, shell.quickOutput("", help)?.lines)
+        assertEquals(help, shell.quickOutput("another-command", help)?.lines?.drop(1))
+        assertEquals(listOf("hello world"), shell.quickOutput("echo \"hello world\"", help)?.lines)
+        assertNull(shell.quickOutput("mkdir \"новая папка\"", help))
+    }
+
     @Test fun quotedPathsCdPwdAndTildeStayInWorkspace() = withWorkspace { root ->
         val folder = File(root, "ROM files").apply { mkdir() }
         File(folder, "flash log.txt").writeText("ERROR: failed\nOK\n")
@@ -71,6 +81,26 @@ class LocalShellTest {
         assertEquals("new", moveTarget.readText())
     }
 
+    @Test fun copyReportsProgressAndWritesExactBytesIntoNewDirectory() = withWorkspace { root ->
+        val bytes = ByteArray(2 * 1024 * 1024 + 31) { (it % 251).toByte() }
+        val source = File(root, "test image.img").apply { writeBytes(bytes) }
+        val shell = LocalShell()
+        val updates = mutableListOf<Pair<Long, Long>>()
+        val size = bytes.size.toLong()
+
+        shell.execute("mkdir \"backup folder\"", { root }) { error("Unexpected confirmation") }
+        shell.execute("cp \"${source.name}\" \"backup folder\"", { root }, onCopyProgress = { copied, total ->
+            updates.add(copied to total)
+        }) { error("Unexpected confirmation") }
+
+        assertEquals(0L to size, updates.first())
+        assertEquals(size to size, updates.last())
+        assertTrue(updates.size > 2)
+        assertTrue(updates.all { (_, total) -> total == size })
+        assertTrue(updates.zipWithNext().all { (previous, current) -> previous.first < current.first })
+        assertArrayEquals(bytes, File(root, "backup folder/${source.name}").readBytes())
+    }
+
     @Test fun pathsCannotEscapeWorkspace() = withWorkspace { root ->
         val shell = LocalShell()
         val error = try {
@@ -103,14 +133,22 @@ class LocalShellTest {
         assertEquals("Unclosed quote or trailing escape in local command", error?.message)
     }
 
-    @Test fun grepStopsAtAnOverlongLineAndCapsTotalOutput() = withWorkspace { root ->
+    @Test fun grepContinuesPastLongLinesAndFindsMatchesAcrossChunks() = withWorkspace { root ->
+        val file = File(root, "input.txt")
+        // The first match starts two characters before the end of a read chunk.
+        file.writeText("x".repeat(12_286) + "match late\r\n" + "y".repeat(20_000) + "\rmatch later")
+        val output = requireNotNull(LocalShell().execute("grep match input.txt", { root }) { false }).lines
+        assertEquals(2, output.size)
+        assertTrue(output.first().contains("match"))
+        assertTrue(output.first().endsWith("[line abbreviated]"))
+        assertTrue(output.first().length < 8_300)
+        assertEquals("match later", output.last())
+    }
+
+    @Test fun grepCapsTotalOutput() = withWorkspace { root ->
         val file = File(root, "input.txt")
         val shell = LocalShell()
         val workspace: suspend () -> File? = { root }
-        file.writeText("match first\r\nignore\rmatch second\n" + "x".repeat(20_000))
-        val overlong = requireNotNull(shell.execute("grep match input.txt", workspace) { false }).lines
-        assertEquals(listOf("match first", "match second"), overlong.dropLast(1))
-        assertTrue(overlong.last().contains("line longer than"))
 
         file.writeText(("match " + "x".repeat(2_000) + "\n").repeat(100))
         val capped = requireNotNull(shell.execute("grep match input.txt", workspace) { false }).lines
