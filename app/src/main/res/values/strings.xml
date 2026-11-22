@@ -46,15 +46,46 @@
     <string name="battery_optimization_already_disabled">✅ Battery optimization is already disabled for the app</string>
     <string name="battery_optimization_message">For long flashing, it is better to disable battery restrictions for this app. This lowers the risk that Android stops the process during file transfer.</string>
     <string name="battery_optimization_open_error">ERROR: could not open battery settings: %1$s</string>
-    <string name="system_terminal_ready">╭─ NEKOFLASH / TERMINAL ───────────────╮
-│ WORKSPACE  ~                         │
-│ ALIAS      Download/NekoFlash        │
-│ HELP       local help                │
-│ DEFAULT    App-managed commands      │
-│                                      │
-│ DEVICE BINARIES (OPTIONAL)           │
+    <string name="system_terminal_ready">┌─ NEKOFLASH / LOCAL TERMINAL ─────────┐
+│ ● HOST · This Android device         │
+│ ⌂ WORKSPACE · ~ = Download/NekoFlash │
+├──────────────────────────────────────┤
+│ ◈ QUICK START                        │
+│ › local help  Command reference      │
+│ echo "OK"    Print a message         │
+│ clear        Clear terminal output   │
+│ › local pwd  Current directory       │
+│ › local ls   List workspace files    │
+│ › local cd "ROM files"               │
+│   cd changes the terminal directory  │
+├──────────────────────────────────────┤
+│ ◈ FILES &amp; TEXT                       │
+│ › local cat "flash.log"              │
+│ › local grep ERROR "flash.log"       │
+│ › local cp boot.img backup/          │
+│ › local mv boot.img images/          │
+│ › local rm old.img                   │
+│   rm asks before deleting            │
+│   cp / mv: individual files only     │
+├──────────────────────────────────────┤
+│ ◈ COMMAND COMPOSITION                │
+│ &amp;&amp;  Continue only after success      │
+│ |   Pass output to the next command  │
+│ echo OK &amp;&amp; ls                        │
+│ cat flash.log | grep ERROR           │
+├──────────────────────────────────────┤
+│ ◈ COMMAND SOURCE                     │
+│ APP  App-managed commands (default)  │
+│ DEVICE  Optional Android utilities   │
 │ export NEKO_USE_DEVICE_BINARIES=1    │
-╰──────────────────────────────────────╯</string>
+│   Prefer device tools when available │
+│   Missing tools use app fallback     │
+│ export NEKO_USE_DEVICE_BINARIES=0    │
+│   Restore app-managed commands       │
+│   No root; app permissions apply     │
+│ Local commands run on this phone     │
+│   Scripts / redirection unsupported  │
+└──────────────────────────────────────┘</string>
     <string name="security_full_terminal_active">ADB and Fastboot commands continue through their existing handlers.</string>
     <string name="terminal_zoom_out_symbol">−</string>
     <string name="terminal_zoom_in_symbol">+</string>

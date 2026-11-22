@@ -91,43 +91,84 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
         private val textView: TextView,
     ) : RecyclerView.ViewHolder(textView) {
         fun bind(item: Item, textSizeSp: Float) {
-            val isWelcome = item.text.startsWith("╭─ NEKOFLASH / TERMINAL")
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isWelcome) 12f else textSizeSp)
-            val defaultColor = ContextCompat.getColor(textView.context, item.tone.colorResource())
-            if (isWelcome) {
-                val styled = SpannableString(item.text)
-                var start = 0
-                item.text.splitToSequence('\n').forEach { line ->
-                    val end = start + line.length
-                    val color = when {
-                        line.startsWith("╭") || line.startsWith("╰") || line.contains("DEVICE BINARIES") ||
-                            line.contains("СИСТЕМНЫЕ УТИЛИТЫ") -> R.color.accent
-                        line.contains("local help") -> R.color.log_success
-                        line.contains("export NEKO_USE_DEVICE_BINARIES=1") -> R.color.log_hint
-                        else -> R.color.log_info
-                    }
-                    styled.setSpan(
-                        ForegroundColorSpan(ContextCompat.getColor(textView.context, color)),
-                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                    if (line.startsWith("│") && line.endsWith("│") && line.length > 1) {
-                        val borderColor = ForegroundColorSpan(
-                            ContextCompat.getColor(textView.context, R.color.accent),
-                        )
-                        styled.setSpan(borderColor, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        styled.setSpan(
-                            ForegroundColorSpan(ContextCompat.getColor(textView.context, R.color.accent)),
-                            end - 1, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                    }
-                    start = end + 1
-                }
-                textView.text = styled
-                textView.setTextColor(defaultColor)
-            } else {
+            val isWelcome = item.text.startsWith("┌─ NEKOFLASH")
+            if (!isWelcome) {
+                textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSizeSp)
                 textView.text = item.text
-                textView.setTextColor(defaultColor)
+                textView.setTextColor(ContextCompat.getColor(textView.context, item.tone.colorResource()))
+                return
             }
+
+            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10.5f)
+            val styled = SpannableString(item.text)
+            fun color(start: Int, end: Int, colorRes: Int) {
+                val safeStart = start.coerceIn(0, styled.length)
+                val safeEnd = end.coerceIn(safeStart, styled.length)
+                if (safeStart < safeEnd) {
+                    styled.setSpan(
+                        ForegroundColorSpan(ContextCompat.getColor(textView.context, colorRes)),
+                        safeStart, safeEnd, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                    )
+                }
+            }
+
+            var offset = 0
+            item.text.split('\n').forEach { line ->
+                val end = offset + line.length
+                if (line.startsWith("┌") || line.startsWith("├") || line.startsWith("└")) {
+                    color(offset, end, R.color.terminal_welcome_frame)
+                    val brand = line.indexOf("NEKOFLASH")
+                    if (brand >= 0) color(offset + brand, offset + brand + 9, R.color.terminal_welcome_title)
+                    val terminal = line.indexOf("LOCAL TERMINAL")
+                    if (terminal >= 0) color(offset + terminal, offset + terminal + 14, R.color.terminal_welcome_cyan)
+                } else if (line.length >= 2) {
+                    color(offset, offset + 1, R.color.terminal_welcome_frame)
+                    color(end - 1, end, R.color.terminal_welcome_frame)
+                    val body = line.substring(1, line.length - 1)
+                    val value = body.trim()
+                    val leading = body.indexOf(value).coerceAtLeast(0)
+                    val valueStart = offset + 1 + leading
+                    val valueEnd = valueStart + value.length
+
+                    when {
+                        value.startsWith("◈ ") -> color(valueStart, valueEnd, R.color.terminal_welcome_section)
+                        value.startsWith("● HOST") || value.startsWith("⌂ WORKSPACE") || value.startsWith("⌂ ПАПКА") ->
+                            color(valueStart, valueEnd, R.color.terminal_welcome_source)
+                        value.startsWith("export NEKO_USE_DEVICE_BINARIES") ->
+                            color(valueStart, valueEnd, R.color.terminal_welcome_cyan)
+                        value.startsWith("APP ") -> color(valueStart, valueStart + 3, R.color.terminal_welcome_command)
+                        value.startsWith("DEVICE ") -> color(valueStart, valueStart + 6, R.color.terminal_welcome_source)
+                        value.startsWith("&&") || value.startsWith("|") -> {
+                            val operatorLength = if (value.startsWith("&&")) 2 else 1
+                            color(valueStart, valueStart + operatorLength, R.color.terminal_welcome_note)
+                        }
+                        value.startsWith("› local ") || value.startsWith("echo ") || value.startsWith("clear ") ||
+                            value.startsWith("cat ") || value.startsWith("local cat ") -> {
+                            val commandEnd = value.indexOf("  ").let { if (it < 0) value.length else it }
+                            color(valueStart, valueStart + commandEnd, R.color.terminal_welcome_command)
+                            value.indexOf("&&").takeIf { it >= 0 }?.let {
+                                color(valueStart + it, valueStart + it + 2, R.color.terminal_welcome_note)
+                            }
+                            value.indexOf('|').takeIf { it >= 0 }?.let {
+                                color(valueStart + it, valueStart + it + 1, R.color.terminal_welcome_note)
+                            }
+                        }
+                        value.startsWith("rm asks") || value.startsWith("cp / mv:") || value.startsWith("No root") ||
+                            value.startsWith("Scripts") || value.startsWith("Удаление") ||
+                            value.startsWith("Root нет") || value.startsWith("Скрипты") ->
+                            color(valueStart, valueEnd, R.color.terminal_welcome_note)
+                        value.startsWith("Prefer device tools") || value.startsWith("Missing tools") ||
+                            value.startsWith("Сначала системные") || value.startsWith("Если нет") ->
+                            color(valueStart, valueEnd, R.color.terminal_welcome_source)
+                        value.startsWith("ADB / FASTBOOT") || value.startsWith("Локальные команды") ->
+                            color(valueStart, valueEnd, R.color.terminal_welcome_cyan)
+                        else -> color(valueStart, valueEnd, R.color.terminal_welcome_text)
+                    }
+                }
+                offset = end + 1
+            }
+            textView.text = styled
+            textView.setTextColor(ContextCompat.getColor(textView.context, R.color.terminal_welcome_text))
         }
     }
 }
