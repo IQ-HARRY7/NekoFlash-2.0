@@ -56,6 +56,9 @@
 │ export NEKO_USE_DEVICE_BINARIES=1    │
 ╰──────────────────────────────────────╯</string>
     <string name="security_full_terminal_active">ADB and Fastboot commands continue through their existing handlers.</string>
+    <string name="terminal_zoom_out_symbol">−</string>
+    <string name="terminal_zoom_in_symbol">+</string>
+    <string name="terminal_text_size_value">%1$dsp</string>
     <string name="terminal_text_label">TEXT</string>
     <string name="terminal_zoom_in">Increase terminal text size</string>
     <string name="terminal_zoom_out">Decrease terminal text size</string>

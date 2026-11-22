@@ -1273,7 +1273,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateTerminalTextSizeLabel() {
-        findViewById<TextView>(R.id.tvTerminalTextSize)?.text = "${terminalTextSizeSp.toInt()}sp"
+        findViewById<TextView>(R.id.tvTerminalTextSize)?.text =
+            getString(R.string.terminal_text_size_value, terminalTextSizeSp.toInt())
     }
 
     private fun copyTerminalOutput() {
