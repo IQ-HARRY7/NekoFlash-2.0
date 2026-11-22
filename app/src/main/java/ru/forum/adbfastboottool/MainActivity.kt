@@ -1137,11 +1137,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun runLocalTerminal(raw: String, command: String) {
         if (localCommandJob?.isActive == true) {
-            viewModel.log("> [Local] A command is still running. Let it finish or tap Stop.")
+            viewModel.log("> [Local] ! A command is still running. Let it finish or tap Stop.")
             return
         }
         if (viewModel.operationActive.value == true) {
-            viewModel.log("> [Local] A USB operation is active. Wait for it to finish before running local commands.")
+            viewModel.log("> [Local] ! A USB operation is active. Wait for it to finish before running local commands.")
             return
         }
 
@@ -1160,7 +1160,7 @@ class MainActivity : AppCompatActivity() {
                     workspace = {
                         withContext(Dispatchers.Main) {
                             if (!PermissionGate.hasStorage(this@MainActivity)) {
-                                viewModel.log("> [Local] Storage access is required for workspace commands.")
+                                viewModel.log("> [Local] ! Storage access is required for workspace commands.")
                                 showPermissionsDialog()
                                 null
                             } else {
@@ -1174,27 +1174,35 @@ class MainActivity : AppCompatActivity() {
                 )
 
                 if (output == null) {
-                    viewModel.log("> [Local] Workspace unavailable. Check storage access and try again.")
-                    viewModel.log("> [Local] echo and local help do not require workspace access.")
+                    viewModel.log("> [Local] ! Workspace unavailable. Check storage access and try again.")
+                    viewModel.log("> [Local] │ echo and local help do not require workspace access.")
                 } else {
                     if (output.clearTerminal) viewModel.clearTerminal()
                     val prompt = viewModel.localShell.prompt(output.directory)
                     if (output.lines.isEmpty()) {
-                        if (!output.clearTerminal) viewModel.log("> [Local] $prompt")
+                        if (!output.clearTerminal) viewModel.log("> [Local] ◇ $prompt")
                     } else {
-                        viewModel.log("> [Local] $prompt")
-                        output.lines.forEach { line -> viewModel.log("> [Local] $line") }
+                        viewModel.log("> [Local] ◇ $prompt")
+                        output.lines.forEach { line ->
+                            val marker = when (DiagnosticLogPolicy.classify(line).level) {
+                                DiagnosticLogPolicy.Level.ERROR -> "✕"
+                                DiagnosticLogPolicy.Level.WARNING -> "!"
+                                DiagnosticLogPolicy.Level.SUCCESS -> "✓"
+                                DiagnosticLogPolicy.Level.INFO -> "│"
+                            }
+                            viewModel.log("> [Local] $marker $line")
+                        }
                     }
                     if (!output.clearTerminal || output.lines.isNotEmpty()) {
-                        viewModel.log("> [Local] Completed in ${elapsed()}.")
+                        viewModel.log("> [Local] ✓ Completed in ${elapsed()}.")
                     }
                 }
             } catch (cancelled: CancellationException) {
-                viewModel.log("> [Local] Cancelled after ${elapsed()}.")
+                viewModel.log("> [Local] ! Cancelled after ${elapsed()}.")
                 throw cancelled
             } catch (error: Exception) {
-                viewModel.log("> [Local] Error: ${error.message ?: error.javaClass.simpleName}")
-                viewModel.log("> [Local] Failed after ${elapsed()}.")
+                viewModel.log("> [Local] ✕ Error: ${error.message ?: error.javaClass.simpleName}")
+                viewModel.log("> [Local] ✕ Failed after ${elapsed()}.")
             } finally {
                 localCommandJob = null
                 renderLocalCommandStatus(false)

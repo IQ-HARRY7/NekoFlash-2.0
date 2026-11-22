@@ -135,12 +135,14 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
                         value.contains("LOCAL TERMINAL") -> R.color.terminal_welcome_cyan
                         value.startsWith("export NEKO_USE_DEVICE_BINARIES=1") -> R.color.terminal_welcome_enabled
                         value.startsWith("export NEKO_USE_DEVICE_BINARIES=0") -> R.color.terminal_welcome_reset
-                        value.contains("local help") -> R.color.terminal_welcome_help
-                        value.startsWith("✓") || value.startsWith("↳") -> R.color.terminal_welcome_enabled
-                        value.startsWith("⚙") || value.startsWith("📱") || value.startsWith("🧩") ||
-                            value.startsWith("📁") || value.startsWith("🕒") || value.startsWith("📅") ->
+                        value.startsWith("i ") || value.contains("local help") -> R.color.terminal_welcome_help
+                        value.startsWith("✓") || value.startsWith(">") -> R.color.terminal_welcome_enabled
+                        value.startsWith("<") -> R.color.terminal_welcome_reset
+                        value.startsWith("->") -> R.color.terminal_welcome_source
+                        value.startsWith("@") || value.startsWith("#") || value.startsWith("*") ||
+                            value.startsWith("+") || value.startsWith("~") ->
                             R.color.terminal_welcome_source
-                        value.startsWith("🔐") -> R.color.terminal_welcome_note
+                        value.startsWith("!") -> R.color.terminal_welcome_note
                         value.startsWith("⇄") -> R.color.terminal_welcome_cyan
                         else -> R.color.terminal_welcome_text
                     }
@@ -167,7 +169,14 @@ private fun CompactLogRenderPolicy.Tone.colorResource(): Int = when (this) {
     CompactLogRenderPolicy.Tone.HINT -> R.color.log_hint
     CompactLogRenderPolicy.Tone.SUCCESS -> R.color.log_success
     CompactLogRenderPolicy.Tone.COMMAND -> R.color.log_command
-    CompactLogRenderPolicy.Tone.WARNING -> R.color.log_hint
+    CompactLogRenderPolicy.Tone.WARNING -> R.color.log_warning
     CompactLogRenderPolicy.Tone.SYSTEM -> R.color.log_system
     CompactLogRenderPolicy.Tone.INFO -> R.color.log_info
+    CompactLogRenderPolicy.Tone.LOCAL_OUTPUT -> R.color.log_local_output
+    CompactLogRenderPolicy.Tone.TRANSPORT -> R.color.log_transport
+    CompactLogRenderPolicy.Tone.FASTBOOT -> R.color.log_fastboot
+    CompactLogRenderPolicy.Tone.FILE -> R.color.log_file
+    CompactLogRenderPolicy.Tone.DATA -> R.color.log_data
+    CompactLogRenderPolicy.Tone.OPERATION -> R.color.log_operation
+    CompactLogRenderPolicy.Tone.INVENTORY -> R.color.log_inventory
 }

@@ -40,6 +40,16 @@ class TerminalWelcomeMessageTest {
         assertFalse(lines.any { it.contains("local ls") || it.contains("local cat") || it.contains("local grep") })
     }
 
+    @Test fun framedRowsUseSingleCellSymbolsSoBordersStayAligned() {
+        val lines = TerminalWelcomeMessage.layout(details())
+        val framed = lines.filter { it.startsWith("║ ") }
+        assertTrue(framed.isNotEmpty())
+        assertTrue(framed.all { line ->
+            line.none { Character.isHighSurrogate(it) || Character.isLowSurrogate(it) }
+        })
+        assertTrue(framed.all { it.first() == '║' && it.last() == '║' })
+    }
+
     @Test fun visualRowsAreRecognizedForSemanticColouring() {
         val lines = TerminalWelcomeMessage.layout(details())
         assertTrue(lines.all(TerminalWelcomeMessage::isWelcomeLine))

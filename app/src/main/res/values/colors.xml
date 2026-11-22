@@ -25,6 +25,13 @@
     <color name="log_command">#E98B49</color>
     <color name="log_system">#758397</color>
     <color name="log_info">#9FAAB6</color>
+    <color name="log_local_output">#82CAD5</color>
+    <color name="log_transport">#72C8D8</color>
+    <color name="log_fastboot">#BBA5E8</color>
+    <color name="log_file">#8FD2AD</color>
+    <color name="log_data">#8DB9ED</color>
+    <color name="log_operation">#C9A6DF</color>
+    <color name="log_inventory">#79CFC1</color>
     <color name="terminal_welcome_frame">#647B91</color>
     <color name="terminal_welcome_title">#F1F5FA</color>
     <color name="terminal_welcome_cyan">#79CED8</color>

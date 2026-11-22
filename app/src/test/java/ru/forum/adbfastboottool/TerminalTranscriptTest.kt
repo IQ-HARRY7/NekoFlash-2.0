@@ -52,6 +52,36 @@ class TerminalTranscriptTest {
         assertEquals(listOf("same", "same"), lines.takeLast(2))
         transcript.clear(); assertTrue(transcript.snapshot().isEmpty())
     }
+    @Test fun localTerminalOutputUsesSemanticTones() {
+        assertEquals(CompactLogRenderPolicy.Tone.COMMAND,
+            CompactLogRenderPolicy.format("> [Local] ~/ROM $ ls").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.LOCAL_OUTPUT,
+            CompactLogRenderPolicy.format("> [Local] │ boot.img").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.SUCCESS,
+            CompactLogRenderPolicy.format("> [Local] ✓ Completed in 61 ms.").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.WARNING,
+            CompactLogRenderPolicy.format("> [Local] ! Cancelled after 2 s.").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.ERROR,
+            CompactLogRenderPolicy.format("> [Local] ✕ Error: permission denied").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.SYSTEM,
+            CompactLogRenderPolicy.format("> [Local] ◇ ~/ROM").tone)
+    }
+
+    @Test fun taskCategoriesUseDistinctOutputTones() {
+        assertEquals(CompactLogRenderPolicy.Tone.TRANSPORT,
+            CompactLogRenderPolicy.format("ADB connection established").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.FASTBOOT,
+            CompactLogRenderPolicy.format("Fastboot getvar: product").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.FILE,
+            CompactLogRenderPolicy.format("File copied successfully").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.DATA,
+            CompactLogRenderPolicy.format("Fastboot data transferred: 4 MB").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.OPERATION,
+            CompactLogRenderPolicy.format("Operation wake lock acquired").tone)
+        assertEquals(CompactLogRenderPolicy.Tone.INVENTORY,
+            CompactLogRenderPolicy.format("Partition inventory complete").tone)
+    }
+
     @Test fun formattingDoesNotDecoratePayloadOrTreatWordsAsErrors() {
         for (line in listOf("0 ERROR messages", "LOCKED=no", "=== output ===", "plain text")) {
             assertEquals(line, CompactLogRenderPolicy.format(line).text)
