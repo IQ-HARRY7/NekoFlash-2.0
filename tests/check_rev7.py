@@ -47,7 +47,7 @@ rev59_shell_redirect_vm_blob = '90bb79853e6221d20b9006477175c4ed35fa2e33'
 # Local terminal commands share admission with USB and workspace operations.
 local_terminal_vm_blob = 'f729ec96acd1b48a069df24390acf8dd8cde67e9'
 # Local copies and overwrite confirmation survive an Activity configuration change.
-retained_local_terminal_vm_blob = 'ae4de2700cc0c2b3473ff7bd3bef7fa68bb1f811'
+retained_local_terminal_vm_blob = '5115ac3dbe1ea7c40a7122de33d921df10bcf082'
 shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'

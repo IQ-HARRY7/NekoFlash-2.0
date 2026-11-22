@@ -7,6 +7,7 @@ import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
+import android.os.StatFs
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
@@ -103,7 +104,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     val operationActive: LiveData<Boolean> = _operationActive
 
     internal val workspaceImport = WorkspaceImportController(application) { log(it) }
-    internal val localShell = LocalShell()
+    internal val localShell = LocalShell { StatFs(it.absolutePath).availableBytes }
     private val _localTerminalRunning = MutableLiveData(false)
     val localTerminalRunning: LiveData<Boolean> = _localTerminalRunning
     private val _localTerminalCopyProgress = MutableLiveData<LocalCopyProgress?>(null)

@@ -17,13 +17,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class LocalShellTest {
+    private fun newShell() = LocalShell { Files.getFileStore(it.toPath()).usableSpace }
+
     private fun withWorkspace(test: suspend (File) -> Unit) = runBlocking {
         val root = Files.createTempDirectory("nekoflash-local").toFile()
         try { test(root) } finally { root.deleteRecursively() }
     }
 
     @Test fun echoAndHelpDoNotRequestStorage() = runBlocking {
-        val shell = LocalShell()
+        val shell = newShell()
         val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
         val echo = shell.execute("echo \"hello world\"", noWorkspace) { false }
         val help = shell.execute("help", noWorkspace) { false }
@@ -32,7 +34,7 @@ class LocalShellTest {
     }
 
     @Test fun quickOutputUsesLocalizedHelpAndLeavesFileCommandsToTheWorker() {
-        val shell = LocalShell()
+        val shell = newShell()
         val help = listOf("Справка по локальным командам", "local mkdir \"новая папка\"")
         assertEquals(help, shell.quickOutput("help", help)?.lines)
         assertEquals(help, shell.quickOutput("", help)?.lines)
@@ -44,7 +46,7 @@ class LocalShellTest {
     @Test fun quotedPathsCdPwdAndTildeStayInWorkspace() = withWorkspace { root ->
         val folder = File(root, "ROM files").apply { mkdir() }
         File(folder, "flash log.txt").writeText("ERROR: failed\nOK\n")
-        val shell = LocalShell()
+        val shell = newShell()
         val workspace: suspend () -> File? = { root }
 
         assertEquals(listOf("ERROR: failed"), shell.execute("grep ERROR \"ROM files/flash log.txt\"", workspace) { false }?.lines)
@@ -60,7 +62,7 @@ class LocalShellTest {
         val source = File(root, "boot image.img").apply { writeText("new") }
         val destination = File(root, "backup").apply { mkdir() }
         File(destination, source.name).writeText("old")
-        val shell = LocalShell()
+        val shell = newShell()
         val workspace: suspend () -> File? = { root }
 
         val cancelled = shell.execute("cp \"boot image.img\" backup", workspace) { false }
@@ -84,7 +86,7 @@ class LocalShellTest {
     @Test fun copyReportsProgressAndWritesExactBytesIntoNewDirectory() = withWorkspace { root ->
         val bytes = ByteArray(2 * 1024 * 1024 + 31) { (it % 251).toByte() }
         val source = File(root, "test image.img").apply { writeBytes(bytes) }
-        val shell = LocalShell()
+        val shell = newShell()
         val updates = mutableListOf<Pair<Long, Long>>()
         val size = bytes.size.toLong()
 
@@ -102,7 +104,7 @@ class LocalShellTest {
     }
 
     @Test fun pathsCannotEscapeWorkspace() = withWorkspace { root ->
-        val shell = LocalShell()
+        val shell = newShell()
         val error = try {
             shell.execute("cd ..", { root }) { false }
             null
@@ -123,7 +125,7 @@ class LocalShellTest {
     }
 
     @Test fun localTokenizerErrorsDoNotMentionFastboot() = runBlocking {
-        val shell = LocalShell()
+        val shell = newShell()
         val error = try {
             shell.execute("grep \"unterminated file.txt", { null }) { false }
             null
@@ -137,7 +139,7 @@ class LocalShellTest {
         val file = File(root, "input.txt")
         // The first match starts two characters before the end of a read chunk.
         file.writeText("x".repeat(12_286) + "match late\r\n" + "y".repeat(20_000) + "\rmatch later")
-        val output = requireNotNull(LocalShell().execute("grep match input.txt", { root }) { false }).lines
+        val output = requireNotNull(newShell().execute("grep match input.txt", { root }) { false }).lines
         assertEquals(2, output.size)
         assertTrue(output.first().contains("match"))
         assertTrue(output.first().endsWith("[line abbreviated]"))
@@ -147,7 +149,7 @@ class LocalShellTest {
 
     @Test fun grepCapsTotalOutput() = withWorkspace { root ->
         val file = File(root, "input.txt")
-        val shell = LocalShell()
+        val shell = newShell()
         val workspace: suspend () -> File? = { root }
 
         file.writeText(("match " + "x".repeat(2_000) + "\n").repeat(100))
@@ -159,7 +161,7 @@ class LocalShellTest {
 
     @Test fun directoryListingCapsNumberOfItems() = withWorkspace { root ->
         repeat(215) { File(root, "item-$it").createNewFile() }
-        val lines = requireNotNull(LocalShell().execute("ls", { root }) { false }).lines
+        val lines = requireNotNull(newShell().execute("ls", { root }) { false }).lines
         assertEquals(200, lines.dropLast(1).size)
         assertTrue(lines.last().contains("listing limited"))
     }
@@ -170,7 +172,7 @@ class LocalShellTest {
             parentFile!!.mkdirs()
             writeText("staged")
         }
-        val shell = LocalShell()
+        val shell = newShell()
         val workspace: suspend () -> File? = { root }
         assertEquals(listOf("session"), shell.execute("grep session logs/session.txt", workspace) { false }?.lines)
         shell.execute("cp logs/session.txt copied.txt", workspace) { false }
@@ -196,7 +198,7 @@ class LocalShellTest {
         val target = File(root, "target.txt").apply { writeText("target") }
         val cancellation = ImportCancellation()
         val error = runCatching {
-            LocalShell().execute("mv source.txt target.txt", { root }, cancellation) {
+            newShell().execute("mv source.txt target.txt", { root }, cancellation) {
                 assertTrue(cancellation.cancel())
                 true
             }
@@ -220,7 +222,7 @@ class LocalShellTest {
             }
             var output: LocalShell.Output? = null
             val command = launch(dispatcher, start = CoroutineStart.UNDISPATCHED) {
-                output = LocalShell().execute("mv source.txt target.txt", {
+                output = newShell().execute("mv source.txt target.txt", {
                     allowPublish.await()
                     root
                 }, cancellation) { false }

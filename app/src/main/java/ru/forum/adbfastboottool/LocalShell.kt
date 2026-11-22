@@ -14,7 +14,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
-internal class LocalShell {
+internal class LocalShell(private val availableSpace: (File) -> Long) {
     data class Output(val directory: File?, val lines: List<String>)
 
     private val lock = Mutex()
@@ -260,7 +260,7 @@ internal class LocalShell {
                         LocalFileCopy.copy(
                             input, output, targetDirectory, size, checkCancelled,
                             onProgress = { copied -> onCopyProgress(copied, size) },
-                            availableSpace = { it.usableSpace }
+                            availableSpace = availableSpace
                         )
                     }
                 }
