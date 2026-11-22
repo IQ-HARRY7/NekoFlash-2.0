@@ -91,6 +91,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var etCommand: PtyInputEditText
     private var terminalTextSizeSp = TERMINAL_TEXT_SIZE_DEFAULT
     private var terminalWelcomePending = true
+    private var followConsoleAfterCommand = false
     private lateinit var consoleDockController: ConsoleDockController
     private lateinit var tvStatus: TextView
     private var tvOtgStatus: TextView? = null
@@ -1038,6 +1039,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleTerminalCommandInput() {
         val raw = etCommand.text.toString().trim()
         if (raw.isEmpty()) return
+        followConsoleAfterCommand = true
         // Terminal commands never inherit a pending GUI Operation Center
         // request (for example after a rejected GUI action with no USB).
         autoShowGuiOperation = false
@@ -5243,18 +5245,22 @@ class MainActivity : AppCompatActivity() {
 
         // A user can reopen the panel before ViewModel's 75 ms publication;
         // query its live transcript in that case, never display stale output.
+        // A submitted command is also an explicit request to reveal its result:
+        // the welcome is initially pinned to the top and may fill the viewport.
+        val followAfterCommand = !pinToTop && followConsoleAfterCommand
         val lines = CompactLogRenderPolicy.boundedSnapshot(
-            if (pinToBottom || pinToTop) viewModel.terminalSnapshot()
+            if (pinToBottom || pinToTop || followAfterCommand) viewModel.terminalSnapshot()
             else pendingConsoleSnapshot ?: return
         )
         pendingConsoleSnapshot = null
+        if (followAfterCommand) followConsoleAfterCommand = false
 
         val decision = CompactLogRenderPolicy.decide(lines, compactLogRenderState)
         compactLogRenderState = decision.nextState
 
         val layoutManager = rvConsoleOutput.layoutManager as? LinearLayoutManager
         val keepPinnedToBottom = !pinToTop && ConsoleAutoFollowPolicy.followOutput(
-            explicitlyRequested = pinToBottom,
+            explicitlyRequested = pinToBottom || followAfterCommand,
             currentlyAtBottom = !rvConsoleOutput.canScrollVertically(1),
             selectingText = hasSelectedConsoleText(),
         )
