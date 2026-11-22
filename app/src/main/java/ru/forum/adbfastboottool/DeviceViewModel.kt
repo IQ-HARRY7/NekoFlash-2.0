@@ -96,6 +96,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     val operationActive: LiveData<Boolean> = _operationActive
 
     internal val workspaceImport = WorkspaceImportController(application) { log(it) }
+    internal val localShell = LocalShell()
     internal fun importWorkspaceFile(uri: android.net.Uri, workspace: File): Boolean = synchronized(operationLaunchLock) {
         if (viewModelCleared.get()) false else workspaceImport.start(uri, workspace)
     }
