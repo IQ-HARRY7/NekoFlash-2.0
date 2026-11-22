@@ -25,4 +25,15 @@
     <color name="log_command">#E98B49</color>
     <color name="log_system">#758397</color>
     <color name="log_info">#9FAAB6</color>
+    <color name="terminal_welcome_frame">#647B91</color>
+    <color name="terminal_welcome_title">#F1F5FA</color>
+    <color name="terminal_welcome_cyan">#79CED8</color>
+    <color name="terminal_welcome_section">#BDA9E8</color>
+    <color name="terminal_welcome_label">#91B8E8</color>
+    <color name="terminal_welcome_source">#93BCEB</color>
+    <color name="terminal_welcome_enabled">#8BD6B0</color>
+    <color name="terminal_welcome_reset">#E2BF7B</color>
+    <color name="terminal_welcome_help">#C4A8EB</color>
+    <color name="terminal_welcome_note">#D5C19A</color>
+    <color name="terminal_welcome_text">#C4CFDC</color>
 </resources>

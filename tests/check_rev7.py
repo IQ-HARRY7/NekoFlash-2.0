@@ -25,7 +25,16 @@ def git_blob_sha(data):
 # change still has to match an already approved snapshot or narrow exception.
 local_shell_binding = b'    internal val localShell = LocalShell()\n'
 assert raw_vm.count(local_shell_binding) == 1, 'Unexpected local shell ViewModel binding'
-guarded_vm_blob = git_blob_sha(raw_vm.replace(local_shell_binding, b'', 1))
+welcome_transcript_binding = (
+    b'    private val transcript = TerminalTranscript().apply {\n'
+    b'        TerminalWelcomeMessage.build(application).forEach(::append)\n'
+    b'    }\n'
+)
+original_transcript_binding = b'    private val transcript = TerminalTranscript().apply { append(initialLines.first()) }\n'
+assert raw_vm.count(welcome_transcript_binding) == 1, 'Unexpected terminal welcome initialization'
+guarded_vm_source = raw_vm.replace(local_shell_binding, b'', 1)
+guarded_vm_source = guarded_vm_source.replace(welcome_transcript_binding, original_transcript_binding, 1)
+guarded_vm_blob = git_blob_sha(guarded_vm_source)
 
 # REV31 allows ONE exact raw-shell evidence directory argument in the ADB
 # constructor. Rebuild the old blob in memory; unrelated orchestration edits

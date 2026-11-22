@@ -46,15 +46,31 @@
     <string name="battery_optimization_already_disabled">✅ Оптимизация батареи уже отключена для приложения</string>
     <string name="battery_optimization_message">Для долгой прошивки лучше отключить ограничения батареи для этого приложения. Это снижает риск, что Android остановит процесс во время передачи файла.</string>
     <string name="battery_optimization_open_error">ОШИБКА: не удалось открыть настройки батареи: %1$s</string>
-    <string name="system_terminal_ready">╭─ NEKOFLASH / TERMINAL ───────────────╮
-│ РАБОЧАЯ ПАПКА  ~                     │
-│ АЛИАС          Download/NekoFlash    │
-│ СПРАВКА        local help            │
-│ ПО УМОЛЧАНИЮ   Команды приложения    │
-│                                      │
-│ СИСТЕМНЫЕ УТИЛИТЫ (ОПЦИОНАЛЬНО)      │
-│ export NEKO_USE_DEVICE_BINARIES=1    │
-╰──────────────────────────────────────╯</string>
+    <string name="terminal_welcome_title">Welcome to NekoFlash-2.0</string>
+    <string name="terminal_welcome_subtitle">ЛОКАЛЬНЫЙ ТЕРМИНАЛ</string>
+    <string name="terminal_welcome_environment">СРЕДА</string>
+    <string name="terminal_welcome_host_label">ХОСТ</string>
+    <string name="terminal_welcome_host_value">Android %1$s · API %2$d</string>
+    <string name="terminal_welcome_abi_label">ABI</string>
+    <string name="terminal_welcome_workspace_label">ПАПКА</string>
+    <string name="terminal_welcome_workspace_value">Download/NekoFlash (~)</string>
+    <string name="terminal_welcome_time_label">ВРЕМЯ</string>
+    <string name="terminal_welcome_date_label">ДАТА</string>
+    <string name="terminal_welcome_command_source">ИСТОЧНИК КОМАНД</string>
+    <string name="terminal_welcome_default_label">ПО УМОЛЧАНИЮ</string>
+    <string name="terminal_welcome_app_managed">Команды приложения</string>
+    <string name="terminal_welcome_device_label">УСТРОЙСТВО</string>
+    <string name="terminal_welcome_device_tools">Утилиты Android (опционально)</string>
+    <string name="terminal_welcome_enable_label">ВКЛЮЧИТЬ СИСТЕМНЫЕ УТИЛИТЫ</string>
+    <string name="terminal_welcome_restore_label">ВЕРНУТЬ КОМАНДЫ ПРИЛОЖЕНИЯ</string>
+    <string name="terminal_welcome_fallback_label">РЕЗЕРВ</string>
+    <string name="terminal_welcome_fallback_value">Команды приложения при сбое</string>
+    <string name="terminal_welcome_help">КРАТКАЯ СПРАВКА</string>
+    <string name="terminal_welcome_help_hint">Подробности и примеры:</string>
+    <string name="terminal_welcome_transport">ADB / FASTBOOT: текущие обработчики</string>
+    <string name="terminal_welcome_access_label">ДОСТУП</string>
+    <string name="terminal_welcome_access_value">Права приложения; root не нужен</string>
+    <string name="system_terminal_ready">Локальный терминал NekoFlash</string>
     <string name="security_full_terminal_active">Команды ADB и Fastboot продолжают использовать существующие обработчики.</string>
     <string name="terminal_zoom_out_symbol">−</string>
     <string name="terminal_zoom_in_symbol">+</string>

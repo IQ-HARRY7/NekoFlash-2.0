@@ -3,6 +3,7 @@ package ru.forum.adbfastboottool
 import android.view.LayoutInflater
 import android.text.SpannableString
 import android.text.Spanned
+import android.text.TextUtils
 import android.text.style.ForegroundColorSpan
 import android.util.TypedValue
 import android.view.ViewGroup
@@ -91,43 +92,71 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
         private val textView: TextView,
     ) : RecyclerView.ViewHolder(textView) {
         fun bind(item: Item, textSizeSp: Float) {
-            val isWelcome = item.text.startsWith("╭─ NEKOFLASH / TERMINAL")
-            textView.setTextSize(TypedValue.COMPLEX_UNIT_SP, if (isWelcome) 12f else textSizeSp)
+            val isWelcome = TerminalWelcomeMessage.isWelcomeLine(item.text)
+            textView.setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                if (isWelcome) TerminalWelcomeMessage.TEXT_SIZE_SP else textSizeSp,
+            )
+            textView.setLineSpacing(0f, 1f)
+            textView.setSingleLine(isWelcome)
+            textView.maxLines = if (isWelcome) 1 else Int.MAX_VALUE
+            textView.ellipsize = if (isWelcome) TextUtils.TruncateAt.END else null
             val defaultColor = ContextCompat.getColor(textView.context, item.tone.colorResource())
-            if (isWelcome) {
-                val styled = SpannableString(item.text)
-                var start = 0
-                item.text.splitToSequence('\n').forEach { line ->
-                    val end = start + line.length
-                    val color = when {
-                        line.startsWith("╭") || line.startsWith("╰") || line.contains("DEVICE BINARIES") ||
-                            line.contains("СИСТЕМНЫЕ УТИЛИТЫ") -> R.color.accent
-                        line.contains("local help") -> R.color.log_success
-                        line.contains("export NEKO_USE_DEVICE_BINARIES=1") -> R.color.log_hint
-                        else -> R.color.log_info
-                    }
-                    styled.setSpan(
-                        ForegroundColorSpan(ContextCompat.getColor(textView.context, color)),
-                        start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                    )
-                    if (line.startsWith("│") && line.endsWith("│") && line.length > 1) {
-                        val borderColor = ForegroundColorSpan(
-                            ContextCompat.getColor(textView.context, R.color.accent),
-                        )
-                        styled.setSpan(borderColor, start, start + 1, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-                        styled.setSpan(
-                            ForegroundColorSpan(ContextCompat.getColor(textView.context, R.color.accent)),
-                            end - 1, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-                        )
-                    }
-                    start = end + 1
-                }
-                textView.text = styled
-                textView.setTextColor(defaultColor)
-            } else {
+            if (!isWelcome) {
                 textView.text = item.text
                 textView.setTextColor(defaultColor)
+                return
             }
+
+            val line = item.text
+            val styled = SpannableString(line)
+            fun color(start: Int, end: Int, colorRes: Int) {
+                if (start < end) styled.setSpan(
+                    ForegroundColorSpan(ContextCompat.getColor(textView.context, colorRes)),
+                    start, end, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+                )
+            }
+
+            val frame = R.color.terminal_welcome_frame
+            color(0, line.length, R.color.terminal_welcome_text)
+            when {
+                line.startsWith("╔") || line.startsWith("╚") || line.startsWith("╰") || line.startsWith("=") ->
+                    color(0, line.length, frame)
+                line.startsWith("╟") -> color(0, line.length, R.color.terminal_welcome_section)
+                line.startsWith("║ ") -> {
+                    color(0, 1, frame)
+                    color(line.length - 1, line.length, frame)
+                    val bodyStart = 2
+                    val bodyEnd = (line.length - 2).coerceAtLeast(bodyStart)
+                    val body = line.substring(bodyStart, bodyEnd).trimEnd()
+                    val value = body.trimStart()
+                    val bodyColor = when {
+                        value.contains("Welcome to NekoFlash-2.0") -> R.color.terminal_welcome_title
+                        value.contains("LOCAL TERMINAL") -> R.color.terminal_welcome_cyan
+                        value.startsWith("export NEKO_USE_DEVICE_BINARIES=1") -> R.color.terminal_welcome_enabled
+                        value.startsWith("export NEKO_USE_DEVICE_BINARIES=0") -> R.color.terminal_welcome_reset
+                        value.contains("local help") -> R.color.terminal_welcome_help
+                        value.startsWith("✓") || value.startsWith("↳") -> R.color.terminal_welcome_enabled
+                        value.startsWith("⚙") || value.startsWith("📱") || value.startsWith("🧩") ||
+                            value.startsWith("📁") || value.startsWith("🕒") || value.startsWith("📅") ->
+                            R.color.terminal_welcome_source
+                        value.startsWith("🔐") -> R.color.terminal_welcome_note
+                        value.startsWith("⇄") -> R.color.terminal_welcome_cyan
+                        else -> R.color.terminal_welcome_text
+                    }
+                    color(bodyStart, bodyEnd, bodyColor)
+                    val separator = line.indexOf(" = ", bodyStart)
+                    if (separator in (bodyStart + 1) until bodyEnd) {
+                        color(bodyStart, separator + 1, R.color.terminal_welcome_label)
+                    }
+                    if (body.contains("Welcome to NekoFlash-2.0")) {
+                        val brand = line.indexOf("NekoFlash-2.0", bodyStart)
+                        if (brand >= 0) color(brand, brand + "NekoFlash-2.0".length, R.color.terminal_welcome_cyan)
+                    }
+                }
+            }
+            textView.text = styled
+            textView.setTextColor(defaultColor)
         }
     }
 }

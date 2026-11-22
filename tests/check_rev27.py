@@ -52,3 +52,5 @@ assert 'findViewById<View>(R.id.btnTerminalStop).setOnClickListener { requestOpe
 # Pure policy: no Android types, no I/O.
 assert 'import android' not in policy and 'FileOutputStream' not in policy and 'readText' not in policy
 assert 'import android' not in human
+
+subprocess.run(['python3', str(root/'tests/check_terminal_welcome.py')], cwd=root, check=True)

@@ -266,7 +266,9 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private val _logLines = MutableLiveData(initialLines)
     val logLines: LiveData<List<String>> = _logLines
 
-    private val transcript = TerminalTranscript().apply { append(initialLines.first()) }
+    private val transcript = TerminalTranscript().apply {
+        TerminalWelcomeMessage.build(application).forEach(::append)
+    }
     private val _terminalLines = MutableLiveData(transcript.snapshot())
     internal val terminalLines: LiveData<List<String>> = _terminalLines
     private val terminalSubmission = ThreadLocal<Boolean>()

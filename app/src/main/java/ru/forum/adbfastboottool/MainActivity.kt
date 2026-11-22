@@ -48,6 +48,7 @@ import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
+import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.os.LocaleListCompat
@@ -89,6 +90,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var consoleLogAdapter: ConsoleLogAdapter
     private lateinit var etCommand: PtyInputEditText
     private var terminalTextSizeSp = TERMINAL_TEXT_SIZE_DEFAULT
+    private var terminalWelcomePending = true
     private lateinit var consoleDockController: ConsoleDockController
     private lateinit var tvStatus: TextView
     private var tvOtgStatus: TextView? = null
@@ -271,7 +273,7 @@ class MainActivity : AppCompatActivity() {
         consoleLogAdapter.setTextSizeSp(terminalTextSizeSp)
         rvConsoleOutput.apply {
             layoutManager = LinearLayoutManager(this@MainActivity).apply {
-                stackFromEnd = true
+                stackFromEnd = false
             }
             adapter = consoleLogAdapter
             itemAnimator = null
@@ -283,8 +285,11 @@ class MainActivity : AppCompatActivity() {
         )
         consoleDockController = ConsoleDockController(
             this,
-            rvConsoleOutput,
-            onExpanded = { flushConsoleRender(pinToBottom = true) },
+            onExpanded = {
+                val showWelcome = terminalWelcomePending
+                terminalWelcomePending = false
+                flushConsoleRender(pinToBottom = !showWelcome, pinToTop = showWelcome)
+            },
         ).also { it.initialize() }
         findViewById<View>(R.id.btnConsoleLogs).setOnClickListener { showLogsMenu() }
         findViewById<View>(R.id.btnTerminalZoomOut).setOnClickListener { changeTerminalTextSize(-1f) }
@@ -5220,7 +5225,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun flushConsoleRender(pinToBottom: Boolean = false) {
+    private fun flushConsoleRender(pinToBottom: Boolean = false, pinToTop: Boolean = false) {
         if (consoleRenderScheduled) {
             consoleRenderHandler.removeCallbacks(flushConsoleRenderRunnable)
             consoleRenderScheduled = false
@@ -5231,7 +5236,7 @@ class MainActivity : AppCompatActivity() {
         // A user can reopen the panel before ViewModel's 75 ms publication;
         // query its live transcript in that case, never display stale output.
         val lines = CompactLogRenderPolicy.boundedSnapshot(
-            if (pinToBottom) viewModel.terminalSnapshot()
+            if (pinToBottom || pinToTop) viewModel.terminalSnapshot()
             else pendingConsoleSnapshot ?: return
         )
         pendingConsoleSnapshot = null
@@ -5240,7 +5245,7 @@ class MainActivity : AppCompatActivity() {
         compactLogRenderState = decision.nextState
 
         val layoutManager = rvConsoleOutput.layoutManager as? LinearLayoutManager
-        val keepPinnedToBottom = ConsoleAutoFollowPolicy.followOutput(
+        val keepPinnedToBottom = !pinToTop && ConsoleAutoFollowPolicy.followOutput(
             explicitlyRequested = pinToBottom,
             currentlyAtBottom = !rvConsoleOutput.canScrollVertically(1),
             selectingText = hasSelectedConsoleText(),
@@ -5260,6 +5265,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         when {
+            pinToTop -> rvConsoleOutput.doOnNextLayout { view ->
+                if (!isFinishing && !isDestroyed && consoleDockController.isExpanded) {
+                    (view as? RecyclerView)?.let { output ->
+                        (output.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(0, 0)
+                    }
+                }
+            }
             keepPinnedToBottom -> scrollConsoleToBottom()
             decision.removeCount > 0 && firstVisiblePosition >= 0 -> {
                 layoutManager?.scrollToPositionWithOffset(
@@ -5286,10 +5298,18 @@ class MainActivity : AppCompatActivity() {
         val lastPosition = consoleLogAdapter.itemCount - 1
         if (lastPosition < 0) return
         rvConsoleOutput.post {
-            if (!isFinishing && !isDestroyed &&
-                consoleDockController.isExpanded && !hasSelectedConsoleText()
-            ) {
-                rvConsoleOutput.scrollToPosition(lastPosition)
+            fun followIfScrollable(output: RecyclerView) {
+                if (!isFinishing && !isDestroyed &&
+                    consoleDockController.isExpanded && !hasSelectedConsoleText() &&
+                    output.canScrollVertically(1)
+                ) {
+                    output.scrollToPosition(lastPosition)
+                }
+            }
+            if (rvConsoleOutput.canScrollVertically(1)) {
+                followIfScrollable(rvConsoleOutput)
+            } else {
+                rvConsoleOutput.doOnNextLayout { view -> followIfScrollable(view as RecyclerView) }
             }
         }
     }
