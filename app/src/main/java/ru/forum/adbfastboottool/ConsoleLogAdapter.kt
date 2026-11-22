@@ -135,15 +135,15 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
                         value.contains("LOCAL TERMINAL") -> R.color.terminal_welcome_cyan
                         value.startsWith("export NEKO_USE_DEVICE_BINARIES=1") -> R.color.terminal_welcome_enabled
                         value.startsWith("export NEKO_USE_DEVICE_BINARIES=0") -> R.color.terminal_welcome_reset
-                        value.startsWith("i ") || value.contains("local help") -> R.color.terminal_welcome_help
-                        value.startsWith("✓") || value.startsWith(">") -> R.color.terminal_welcome_enabled
-                        value.startsWith("<") -> R.color.terminal_welcome_reset
-                        value.startsWith("->") -> R.color.terminal_welcome_source
-                        value.startsWith("@") || value.startsWith("#") || value.startsWith("*") ||
-                            value.startsWith("+") || value.startsWith("~") ->
+                        value.startsWith("💡") || value.contains("local help") -> R.color.terminal_welcome_help
+                        value.startsWith("✅") || value.startsWith("↗️") -> R.color.terminal_welcome_enabled
+                        value.startsWith("♻️") -> R.color.terminal_welcome_reset
+                        value.startsWith("↩️") -> R.color.terminal_welcome_source
+                        value.startsWith("📱") || value.startsWith("🧩") || value.startsWith("📁") ||
+                            value.startsWith("🕒") || value.startsWith("📅") || value.startsWith("⚙️") ->
                             R.color.terminal_welcome_source
-                        value.startsWith("!") -> R.color.terminal_welcome_note
-                        value.startsWith("⇄") -> R.color.terminal_welcome_cyan
+                        value.startsWith("🔐") -> R.color.terminal_welcome_note
+                        value.startsWith("🔄") -> R.color.terminal_welcome_cyan
                         else -> R.color.terminal_welcome_text
                     }
                     color(bodyStart, bodyEnd, bodyColor)

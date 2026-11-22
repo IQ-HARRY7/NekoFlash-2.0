@@ -28,7 +28,7 @@ class TerminalWelcomeMessageTest {
     @Test fun everyWelcomeRowFitsTheFixedTerminalWidth() {
         val lines = TerminalWelcomeMessage.layout(details())
         assertTrue(lines.isNotEmpty())
-        assertTrue(lines.all { it.length == 48 })
+        assertTrue(lines.all { TerminalWelcomeMessage.displayWidth(it) == 48 })
     }
 
     @Test fun welcomeTitleAndHelpAreProminentWithoutListingEveryCommand() {
@@ -40,14 +40,15 @@ class TerminalWelcomeMessageTest {
         assertFalse(lines.any { it.contains("local ls") || it.contains("local cat") || it.contains("local grep") })
     }
 
-    @Test fun framedRowsUseSingleCellSymbolsSoBordersStayAligned() {
+    @Test fun framedRowsRestoreEmojiAndKeepBordersAligned() {
         val lines = TerminalWelcomeMessage.layout(details())
         val framed = lines.filter { it.startsWith("║ ") }
         assertTrue(framed.isNotEmpty())
-        assertTrue(framed.all { line ->
-            line.none { Character.isHighSurrogate(it) || Character.isLowSurrogate(it) }
-        })
         assertTrue(framed.all { it.first() == '║' && it.last() == '║' })
+        assertTrue(framed.all { TerminalWelcomeMessage.displayWidth(it) == 48 })
+        listOf("✨", "📱", "🧩", "📁", "🕒", "📅", "✅", "⚙️", "↗️", "♻️", "↩️", "🔐", "💡", "🔄")
+            .forEach { emoji -> assertTrue("Missing $emoji", lines.any { it.contains(emoji) }) }
+        assertFalse(framed.any { it.contains("@ ") || it.contains("# ") || it.contains("-> ") })
     }
 
     @Test fun visualRowsAreRecognizedForSemanticColouring() {

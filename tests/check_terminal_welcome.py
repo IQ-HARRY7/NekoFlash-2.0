@@ -12,8 +12,11 @@ dock = (java / 'ConsoleDockController.kt').read_text(encoding='utf-8')
 
 assert 'TerminalWelcomeMessage.build(application).forEach(::append)' in vm
 assert 'private const val WIDTH = 48' in welcome
-assert 'centered("✦ ${details.title}")' in welcome
-assert 'line.length == WIDTH' in welcome
+assert 'centered("✨ ${details.title}")' in welcome
+assert 'displayWidth(line) == WIDTH' in welcome
+assert 'takeToDisplayWidth(value, CONTENT_WIDTH)' in welcome
+assert all(emoji in welcome for emoji in ('📱', '🧩', '📁', '🕒', '📅', '✅', '⚙️', '↗️', '♻️', '↩️', '🔐', '💡', '🔄'))
+assert 'value.startsWith("📱")' in adapter and 'value.startsWith("💡")' in adapter
 assert 'local help' in welcome
 assert 'local ls' not in welcome and 'local cat' not in welcome and 'local grep' not in welcome
 assert 'TerminalWelcomeMessage.isWelcomeLine(item.text)' in adapter
