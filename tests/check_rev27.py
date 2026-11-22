@@ -47,7 +47,11 @@ android_ns = '{http://schemas.android.com/apk/res/android}'
 stop = [node for node in ui.iter() if node.attrib.get(android_ns + 'id') == '@+id/btnTerminalStop']
 assert len(stop) == 1 and stop[0].tag == 'com.google.android.material.button.MaterialButton'
 assert stop[0].attrib.get(android_ns + 'text') == '@string/terminal_stop_button'
-assert 'findViewById<View>(R.id.btnTerminalStop).setOnClickListener { requestOperationCancelFromUi() }' in main
+terminal_cancel = main.split('findViewById<View>(R.id.btnTerminalStop).setOnClickListener {', 1)[1].split('}', 1)[0]
+assert 'if (terminalShowsLocalCommand) viewModel.cancelLocalTerminalCommand()' in terminal_cancel
+assert 'else requestOperationCancelFromUi()' in terminal_cancel
+usb_cancel = main.split('private fun requestOperationCancelFromUi()', 1)[1].split('private fun ', 1)[0]
+assert 'viewModel.cancelActiveOperation()' in usb_cancel and 'cancelLocalTerminalCommand' not in usb_cancel
 
 # Pure policy: no Android types, no I/O.
 assert 'import android' not in policy and 'FileOutputStream' not in policy and 'readText' not in policy

@@ -173,6 +173,28 @@ class TerminalAndImportAndroidTest {
         }
     }
 
+    @Test fun localEchoRequiresPrefixInAdbTerminal() {
+        val previousWindow = prefs.getString("last_window", null)
+        try {
+            ActivityScenario.launch(MainActivity::class.java).use { scenario ->
+                scenario.onActivity { activity ->
+                    activity.findViewById<View>(R.id.tabAdb).performClick()
+                    command(activity, "echo local-terminal-fixture")
+                    assertTrue(vm().logSnapshot().contains(activity.getString(
+                        R.string.terminal_batch_syntax_hint, "echo local-terminal-fixture"
+                    )))
+                    assertFalse(vm().terminalSnapshot().contains("> [Local] local-terminal-fixture"))
+                    command(activity, "local echo local-terminal-fixture")
+                }
+                waitUntil("local echo output") {
+                    vm().terminalSnapshot().contains("> [Local] local-terminal-fixture")
+                }
+            }
+        } finally {
+            prefs.edit().putString("last_window", previousWindow).commit()
+        }
+    }
+
     @Test fun shellOperationCannotCollapseTerminalOrOpenProgressDialog() {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             scenario.onActivity { it.findViewById<View>(R.id.btnTerminalOpen).performClick() }

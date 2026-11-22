@@ -49,6 +49,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     enum class OperationOutcomeKind { SUCCESS, FAILED, CANCELLED, VERIFY_PENDING, INTERRUPTED }
 
+    internal enum class LocalTerminalAdmission { STARTED, LOCAL_BUSY, USB_BUSY, WORKSPACE_BUSY }
+
     sealed class OperationOutcome {
         object Success : OperationOutcome()
         data class Failed(val message: String) : OperationOutcome()
@@ -97,14 +99,17 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     internal val workspaceImport = WorkspaceImportController(application) { log(it) }
     internal val localShell = LocalShell()
+    private val _localTerminalRunning = MutableLiveData(false)
+    val localTerminalRunning: LiveData<Boolean> = _localTerminalRunning
+
     internal fun importWorkspaceFile(uri: android.net.Uri, workspace: File): Boolean = synchronized(operationLaunchLock) {
-        if (viewModelCleared.get()) false else workspaceImport.start(uri, workspace)
+        if (viewModelCleared.get() || localTerminalOperation != null) false else workspaceImport.start(uri, workspace)
     }
 
-    /** Share the launch lock so workspace cleanup cannot race a new USB job. */
+    /** Share the launch lock so workspace cleanup cannot race a new operation. */
     fun runWorkspaceMaintenanceIfIdle(action: () -> Unit): Boolean = synchronized(operationLaunchLock) {
-        if (workspaceImport.isBusy || operationJob != null || connectionJob?.isCompleted == false ||
-            NativeUsbfsBackend.hasActiveTransfer || NativeUsbfsBackend.backendState().nativeTransferActive
+        if (workspaceImport.isBusy || localTerminalOperation != null || connectionJob?.isCompleted == false ||
+            hasUnfinishedUsbOperation()
         ) return@synchronized false
         action()
         true
@@ -332,6 +337,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     @Volatile
     private var operationJob: Job? = null
     private val operationLaunchLock = Any()
+    private data class LocalTerminalOperation(val job: Job, val cancellation: ImportCancellation)
+    private var localTerminalOperation: LocalTerminalOperation? = null
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val transportTransitionMutex = Mutex()
@@ -1212,6 +1219,42 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun postMainThread(block: () -> Unit) {
         mainHandler.post(block)
+    }
+
+    internal fun launchLocalTerminalCommand(
+        scope: CoroutineScope,
+        block: suspend (ImportCancellation) -> Unit
+    ): LocalTerminalAdmission {
+        val operation = synchronized(operationLaunchLock) {
+            if (localTerminalOperation != null) return LocalTerminalAdmission.LOCAL_BUSY
+            if (viewModelCleared.get() || connectionJob?.isCompleted == false || hasUnfinishedUsbOperation()) {
+                return LocalTerminalAdmission.USB_BUSY
+            }
+            if (workspaceImport.isBusy) return LocalTerminalAdmission.WORKSPACE_BUSY
+
+            val cancellation = ImportCancellation()
+            val job = scope.launch(start = CoroutineStart.LAZY) { block(cancellation) }
+            val local = LocalTerminalOperation(job, cancellation)
+            localTerminalOperation = local
+            _localTerminalRunning.postValue(true)
+            job.invokeOnCompletion {
+                synchronized(operationLaunchLock) {
+                    // Keep the reservation through cancellation and temporary-file cleanup.
+                    if (localTerminalOperation === local) {
+                        localTerminalOperation = null
+                        _localTerminalRunning.postValue(false)
+                    }
+                }
+            }
+            local
+        }
+        operation.job.start()
+        return LocalTerminalAdmission.STARTED
+    }
+
+    internal fun cancelLocalTerminalCommand() {
+        val operation = synchronized(operationLaunchLock) { localTerminalOperation } ?: return
+        if (operation.cancellation.cancel()) operation.job.cancel()
     }
 
     fun runFastbootCommand(cmd: String, heavy: Boolean = true, expectedSerial: String? = null) {
@@ -2191,6 +2234,9 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private fun hasUnfinishedUsbOperation(): Boolean = operationJob != null ||
+        NativeUsbfsBackend.hasActiveTransfer || NativeUsbfsBackend.backendState().nativeTransferActive
+
     /**
      * Запускает ровно одну долгую USB-операцию. Новая операция не вытесняет
      * активную: сначала текущая должна завершиться либо пройти безопасную отмену
@@ -2218,10 +2264,13 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 log("⚠️ USB connect or disconnect is still in progress. Wait for a stable device status.")
                 return
             }
+            if (localTerminalOperation != null) {
+                log(DiagnosticLogPolicy.Level.WARNING, text(R.string.local_terminal_usb_blocked))
+                return
+            }
             // A completed Job can still be delivering its completion callbacks.
             // The reference is cleared only after state/resources have been finalized.
-            if (operationJob != null || NativeUsbfsBackend.hasActiveTransfer ||
-                NativeUsbfsBackend.backendState().nativeTransferActive) {
+            if (hasUnfinishedUsbOperation()) {
                 log("⚠️ Another USB operation is still active. Wait for it to finish first or perform a safe cancel.")
                 return
             }
@@ -2457,10 +2506,11 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     override fun onCleared() {
+        viewModelCleared.set(true)
+        cancelLocalTerminalCommand()
         workspaceImport.close()
         mainHandler.removeCallbacksAndMessages(null)
         flushDiagnostics("VIEWMODEL_CLEARED", terminal = true)
-        viewModelCleared.set(true)
         synchronized(operationLaunchLock) {
             val generation = connectionGeneration.incrementAndGet()
             val transitionJob = transportScope.launch(start = CoroutineStart.LAZY) {

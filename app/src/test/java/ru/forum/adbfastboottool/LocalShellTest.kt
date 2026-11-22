@@ -2,7 +2,17 @@ package ru.forum.adbfastboottool
 
 import java.io.File
 import java.nio.file.Files
+import kotlin.coroutines.CoroutineContext
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -64,7 +74,7 @@ class LocalShellTest {
     @Test fun pathsCannotEscapeWorkspace() = withWorkspace { root ->
         val shell = LocalShell()
         val error = try {
-            shell.execute("cd ..", { root }, { false })
+            shell.execute("cd ..", { root }) { false }
             null
         } catch (failure: Exception) {
             failure
@@ -73,9 +83,11 @@ class LocalShellTest {
         assertEquals("~", shell.prompt())
     }
 
-    @Test fun terminalRecognizesOnlyLocalPrefixAndBareEcho() {
+    @Test fun terminalRequiresExplicitLocalPrefix() {
         assertEquals("ls \"ROM files\"", extractLocalCommand("local ls \"ROM files\""))
-        assertEquals("echo hello", extractLocalCommand("echo hello"))
+        assertEquals("echo hello", extractLocalCommand("local echo hello"))
+        assertEquals("", extractLocalCommand("local"))
+        assertNull(extractLocalCommand("echo hello > output.txt"))
         assertNull(extractLocalCommand("fastboot reboot"))
         assertNull(extractLocalCommand("adb shell ls"))
     }
@@ -83,11 +95,113 @@ class LocalShellTest {
     @Test fun localTokenizerErrorsDoNotMentionFastboot() = runBlocking {
         val shell = LocalShell()
         val error = try {
-            shell.execute("grep \"unterminated file.txt", { null }, { false })
+            shell.execute("grep \"unterminated file.txt", { null }) { false }
             null
         } catch (failure: IllegalArgumentException) {
             failure
         }
         assertEquals("Unclosed quote or trailing escape in local command", error?.message)
+    }
+
+    @Test fun grepStopsAtAnOverlongLineAndCapsTotalOutput() = withWorkspace { root ->
+        val file = File(root, "input.txt")
+        val shell = LocalShell()
+        val workspace: suspend () -> File? = { root }
+        file.writeText("match first\r\nignore\rmatch second\n" + "x".repeat(20_000))
+        val overlong = requireNotNull(shell.execute("grep match input.txt", workspace) { false }).lines
+        assertEquals(listOf("match first", "match second"), overlong.dropLast(1))
+        assertTrue(overlong.last().contains("line longer than"))
+
+        file.writeText(("match " + "x".repeat(2_000) + "\n").repeat(100))
+        val capped = requireNotNull(shell.execute("grep match input.txt", workspace) { false }).lines
+        assertTrue(capped.dropLast(1).isNotEmpty())
+        assertTrue(capped.dropLast(1).sumOf { it.length } <= 65_536)
+        assertTrue(capped.last().contains("output limit reached"))
+    }
+
+    @Test fun directoryListingCapsNumberOfItems() = withWorkspace { root ->
+        repeat(215) { File(root, "item-$it").createNewFile() }
+        val lines = requireNotNull(LocalShell().execute("ls", { root }) { false }).lines
+        assertEquals(200, lines.dropLast(1).size)
+        assertTrue(lines.last().contains("listing limited"))
+    }
+
+    @Test fun appManagedFilesMayBeReadAndCopiedOutButNotMutated() = withWorkspace { root ->
+        val log = File(root, "logs/session.txt").apply { parentFile!!.mkdir(); writeText("session") }
+        val stage = File(root, "nested/.nekoflash-import-test/pending.part").apply {
+            parentFile!!.mkdirs()
+            writeText("staged")
+        }
+        val shell = LocalShell()
+        val workspace: suspend () -> File? = { root }
+        assertEquals(listOf("session"), shell.execute("grep session logs/session.txt", workspace) { false }?.lines)
+        shell.execute("cp logs/session.txt copied.txt", workspace) { false }
+        assertEquals("session", File(root, "copied.txt").readText())
+        val commands = listOf(
+            "mv logs/session.txt moved.txt",
+            "cp copied.txt logs/session.txt",
+            "mv nested/.nekoflash-import-test/pending.part moved.txt",
+            "cp copied.txt nested/.nekoflash-new.part"
+        )
+        for (command in commands) {
+            val error = runCatching { shell.execute(command, workspace) { error("Must fail before confirmation") } }
+                .exceptionOrNull()
+            assertTrue(error is IllegalArgumentException && error.message.orEmpty().contains("app-managed"))
+        }
+        assertEquals("session", log.readText())
+        assertEquals("staged", stage.readText())
+        assertFalse(File(root, "moved.txt").exists())
+    }
+
+    @Test fun cancellationBeforePublishPreservesSourceAndDestination() = withWorkspace { root ->
+        val source = File(root, "source.txt").apply { writeText("source") }
+        val target = File(root, "target.txt").apply { writeText("target") }
+        val cancellation = ImportCancellation()
+        val error = runCatching {
+            LocalShell().execute("mv source.txt target.txt", { root }, cancellation) {
+                assertTrue(cancellation.cancel())
+                true
+            }
+        }.exceptionOrNull()
+        assertTrue(error is CancellationException)
+        assertEquals("source", source.readText())
+        assertEquals("target", target.readText())
+    }
+
+    @Test fun cancellationAfterPublishPreservesSuccessfulResult() = withWorkspace { root ->
+        coroutineScope {
+            val source = File(root, "source.txt").apply { writeText("source") }
+            val target = File(root, "target.txt")
+            val cancellation = ImportCancellation()
+            val allowPublish = CompletableDeferred<Unit>()
+            val pendingResume = CompletableDeferred<Runnable>()
+            val dispatcher = object : CoroutineDispatcher() {
+                override fun dispatch(context: CoroutineContext, block: Runnable) {
+                    if (!pendingResume.complete(block)) block.run()
+                }
+            }
+            var output: LocalShell.Output? = null
+            val command = launch(dispatcher, start = CoroutineStart.UNDISPATCHED) {
+                output = LocalShell().execute("mv source.txt target.txt", {
+                    allowPublish.await()
+                    root
+                }, cancellation) { false }
+            }
+            try {
+                // The caller must have suspended before IO completes and dispatches its resume.
+                allowPublish.complete(Unit)
+                withTimeout(10_000) { pendingResume.await() }
+                assertFalse(source.exists())
+                assertEquals("source", target.readText())
+                assertFalse(cancellation.cancel())
+            } finally {
+                command.cancel()
+                // Release a captured resume or allow a delayed dispatch to run immediately.
+                pendingResume.complete(Runnable {})
+                withContext(NonCancellable) { pendingResume.await().run() }
+            }
+            command.join()
+            assertTrue(output?.lines?.single()?.contains("Moved") == true)
+        }
     }
 }

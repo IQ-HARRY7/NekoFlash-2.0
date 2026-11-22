@@ -151,7 +151,7 @@
     <string name="console_logs_button">Логи</string>
     <string name="layout_icon_up">▲</string>
     <string name="layout_icon_down">▼</string>
-    <string name="layout_command_hint">adb shell / adb shell getprop / fastboot getvar all</string>
+    <string name="layout_command_hint">adb shell / fastboot getvar all / local help</string>
     <string name="continue_upper">ПРОДОЛЖИТЬ</string>
 
     <!-- 2.5.1 Classic Recovery UI -->
@@ -170,6 +170,21 @@
     <string name="layout_operation_center_last_event">Последняя запись журнала: %1$s</string>
     <string name="layout_operation_console">Открыть консоль</string>
     <string name="terminal_stop_button">Отмена</string>
+    <string name="local_terminal_running">Выполняется локальная команда…</string>
+    <string name="local_terminal_wait_local">Локальная команда уже выполняется. Дождитесь завершения или нажмите «%1$s».</string>
+    <string name="local_terminal_wait_usb">Дождитесь завершения USB-операции перед запуском локальной команды.</string>
+    <string name="local_terminal_wait_import">Дождитесь завершения импорта файлов перед запуском локальной команды.</string>
+    <string name="local_terminal_usb_blocked">Дождитесь завершения локальной команды или отмените её перед запуском USB-операции.</string>
+    <string name="local_terminal_workspace_unavailable">Рабочая папка недоступна. Проверьте доступ к файлам и повторите попытку.</string>
+    <string name="local_terminal_working_directory">Текущая папка — %1$s.</string>
+    <string name="local_terminal_milliseconds">%1$d мс</string>
+    <string name="local_terminal_seconds">%1$.2f с</string>
+    <string name="local_terminal_finished">Выполнено за %1$s.</string>
+    <string name="local_terminal_cancelled">Отменено через %1$s.</string>
+    <string name="local_terminal_failed">Ошибка через %1$s. %2$s</string>
+    <string name="local_terminal_replace_title">Заменить существующий файл?</string>
+    <string name="local_terminal_replace_message">Файл по пути %1$s уже существует.</string>
+    <string name="local_terminal_replace">Заменить</string>
     <string name="layout_operation_cancel">Отменить операцию</string>
     <plurals name="layout_operation_steps_more">
         <item quantity="one">… и ещё %1$d шаг</item>
@@ -534,7 +549,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
 
     <string name="rev18_history_previous">Предыдущая команда</string>
     <string name="rev18_history_next">Следующая команда</string>
-    <string name="rev18_workspace_busy">Дождись завершения USB-операции перед удалением её файлов.</string>
+    <string name="rev18_workspace_busy">Дождитесь завершения текущей операции перед очисткой рабочей папки.</string>
     <string name="rev19_fastboot_serial_mismatch">Fastboot -s %1$s: серийный номер выбранного устройства — %2$s. Выбери нужное устройство; команда не отправлена.</string>
     <string name="rev19_sideload_identity_unconfirmed">Результат Sideload не подтверждён: серийный номер устройства не совпадает или недоступен.</string>
     <string name="rev19_sideload_attempt_unconfirmed">Передача завершена; результат этой попытки не подтверждён. Проверь экран Recovery. Для автоматической проверки сначала подключись к Recovery, затем включи Sideload.</string>
@@ -573,7 +588,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev26_terminal_completed">Выполнено.</string>
     <string name="rev26_terminal_copy">Копировать вывод терминала</string>
     <string name="rev26_terminal_copied">Вывод терминала скопирован</string>
-    <string name="rev26_import_busy">Импорт уже выполняется.</string>
+    <string name="rev26_import_busy">Дождитесь завершения текущей операции с рабочей папкой перед импортом.</string>
     <string name="rev26_import_cancelled">Импорт отменён. Временный файл удалён.</string>
     <string name="rev26_import_cancelling">Отмена и удаление временных данных…</string>
     <string name="rev26_import_progress_known">Скопировано %1$s из %2$s</string>
