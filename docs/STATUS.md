@@ -1,6 +1,6 @@
 # NekoFlash 2.0 — current status
 
-**Updated:** 19 November 2026
+**Updated:** 22 November 2026
 
 ## Signed release
 
@@ -34,7 +34,7 @@ PRs #97–#99 (audit, Settings community links and vector brand icons) and PRs #
 - **Google Search Console:** URL-prefix ownership was confirmed on 14 November. After version 4 publication, `sitemap.xml` was resubmitted and Google displayed **“Файл Sitemap отправлен”**. The report still showed **12 discovered pages** from the previous processing pass; processing all 18 URLs and actual search-engine inclusion are **not yet confirmed**. Performance/indexing overview reports are still processing data.
 - The earlier manual indexing request for `/ru/` was rejected with “Quota exceeded” on 14 November. No new manual indexing request was sent during this publication.
 - **Next step:** check Search Console's discovered-page and indexing reports after Google processes the updated sitemap. Prepared 4PDA/Telegram promotion remains a separate action; no forum post or group message was sent during publication.
-- [4PDA BBCode draft](4PDA_POST_RU.bbcode) requests volunteer verification of actual Xiaomi bootloader unlocking. NekoFlash previously unlocked POCO X3 Pro, POCO F5 and POCO X7 Pro (maintainer-confirmed history). On a locked POCO F5, Xiaomi returned `20036` with 164 hours remaining. A full on-device unlock test is pending the end of that period.
+- The [4PDA BBCode draft](4PDA_POST_RU.bbcode) requests additional hardware coverage for Xiaomi Unlock. The POCO F5 run that followed the earlier `20036` response is now documented below.
 
 ## Mi Unlock result handling — 17 November 2026
 
@@ -42,7 +42,7 @@ Starting with Alpha14, NekoFlash completes Mi Unlock on the final OKAY response 
 
 An absent final response remains unconfirmed; an explicit FAIL keeps the complete device reason and stage. Xiaomi response codes/text, server-provided waiting hours (including 20036), region guidance and session-expiration handling are retained. The optional later Fastboot check is only for unresolved/legacy attempts, is bound to device identity, and cannot overwrite another task's GUI result. The unlock request and device command are never automatically replayed.
 
-This is an implementation change with automated regression coverage, not a new hardware unlock qualification. The change is included in the published Alpha14 APK; the POCO F5 end-to-end test is still pending Xiaomi's waiting period.
+This change first shipped in Alpha14. It passed on POCO F5 in the signed Alpha15 build on 22 November: `oem unlock` returned final `OKAY` before USB detach and the app reported success. Later diagnostic Fastboot attachment confirmed that `unlocked` had changed from `no` to `yes`.
 
 ## Hardware disposition
 
@@ -55,7 +55,8 @@ This is an implementation change with automated regression coverage, not a new h
 | X3 Pro host → X3 Pro target 128 MiB Pull/Push and SHA-256 | FIELD PASS |
 | POCO F7/onyx host long inbound ADB | Intermittent host-specific USB receive failure; checkpoint/resume robustness implemented |
 | Xiaomi sign-in/session workflow | FIELD PASS for login/session acquisition; unlock itself was not executed in the cited sign-in test |
-| Xiaomi Unlock on POCO F5 (`marble`) | Xiaomi response `20036` with 164 hours of waiting confirmed on test build #804. Full unlock pending. |
+| Xiaomi Unlock on POCO F5 (`marble`) | FIELD PASS on signed Alpha15 over USB OTG, with final `OKAY` and confirmed `unlocked=yes` |
+| Quick Flash Recovery on POCO F5 (`marble`) | FIELD PASS for two `flash:recovery` writes and `reboot-recovery`. With “All slots” selected, the bootloader returned `FAILGetVar Variable Not found` for `has-slot:recovery` and the app used `flash:recovery`. A/B recovery writes remain unverified. |
 | Terminal rotation/input/header | FIELD PASS for the reproduced regression scenario |
 
 Detailed history: [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).

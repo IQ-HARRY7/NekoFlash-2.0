@@ -2,6 +2,20 @@
 
 This is a compact chronology of evidence that materially affects current behavior. It is **not a test assignment list**. Earlier low-level REV notes remain available in Git history and closed issues/PRs.
 
+## 22 November 2026 — POCO F5 (marble) Xiaomi Unlock and Recovery
+
+Signed build `6.0.0-alpha15+ce33b0aba8d1.44412579509`, Android-to-Android over USB OTG in bootloader Fastboot (`18D1:D00D`). The host model and target firmware are unconfirmed in the evidence. Times are as recorded by the host.
+
+| Time | Evidence | Result |
+| --- | --- | --- |
+| 23:12:59–23:13:55 | Before the request, `getvar:unlocked` returned `no`. Xiaomi authorized the request after the earlier waiting-period case (`20036`). The host transferred the unlock payload and `oem unlock` returned final `OKAY` before USB detach. The Operation Center screenshot shows success without requiring Fastboot to reconnect. | Unlock command FIELD PASS |
+| 23:22:26 | On a subsequent Fastboot connection, `getvar:unlocked` returned `yes`. | Physical unlock state confirmed |
+| 23:24:27–23:24:37 | `getvar:has-slot:recovery` returned `FAILGetVar Variable Not found`. Quick Flash fell back to `flash:recovery`; the 100 MiB `recovery.img` (104,857,600 bytes) transferred via Native USBFS. Both `flash:recovery` and `reboot-recovery` returned `OKAY`. | Recovery write and reboot command FIELD PASS |
+| 23:31:47 | Flash was requested without a Fastboot connection. No command was sent. | No write attempted |
+| 23:32:06–23:32:16 | After reconnection the bootloader still reported `unlocked=yes`. The same slot check, `flash:recovery` and `reboot-recovery` sequence repeated with the same results. The supplied photo shows the recovery file browser listing `/sdcard`. | Repeated Recovery write and reboot command FIELD PASS; Recovery UI observed |
+
+The confirmation screen showed `slot: all`, while the wire trace contains two separate `flash:recovery` writes with no `flash:recovery_a`, `flash:recovery_b` or active-slot change. The device-wide `slot-count=2` and `current-slot=a` establish A/B on the device. The layout of `recovery` and writes to both slots remain **unverified**. The fallback is logged in the console. A follow-up should verify partition names with read-only Fastboot queries and surface the resolved write target before confirmation.
+
 ## 13 November 2026 — release acceptance
 
 ### Fastboot format/wipe (#64)

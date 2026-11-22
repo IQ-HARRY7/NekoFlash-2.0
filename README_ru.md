@@ -42,7 +42,7 @@ NekoFlash превращает Android-телефон или планшет в �
 
 Root на телефоне-хосте не требуется. Операции на втором устройстве зависят от его режима, состояния загрузчика и схемы разделов. NekoFlash поддерживает устройства без A/B-слотов и не предполагает, что слоты есть у всех.
 
-**Статус Xiaomi Unlock:** на POCO F5 (`marble`) Xiaomi вернула код `20036` и указала, что осталось 164 часа. Продолжим полный тест разблокировки после окончания срока ожидания Xiaomi. [Актуальная инструкция](https://nekoflash.ncorror.chatgpt.site/ru/guides/xiaomi-unlock-without-pc/).
+**Статус Xiaomi Unlock:** 22 ноября 2026 года подписанная сборка Alpha15 успешно разблокировала POCO F5 (`marble`) через USB OTG. При последующем подключении Fastboot подтвердил `unlocked=yes`. [Актуальная инструкция](https://nekoflash.ncorror.chatgpt.site/ru/guides/xiaomi-unlock-without-pc/).
 
 ## Интерфейс
 
@@ -89,7 +89,7 @@ b0e1562921f43adc69a88f73669f98f7fffd0cebe311ea6bb5706ea8e9dfbe8b
 - **X3 Pro host → X3 Pro target:** повторные Pull/Push 128 МиБ с совпадающим SHA-256 — FIELD PASS.
 - **Recovery/Sideload, Mass Flash, переходы ADB/Fastboot и терминал с поворотом:** принятые аппаратные результаты на документированных связках.
 - **POCO F7 / onyx как хост:** остаются плавающие ошибки долгого входящего USB-трафика; продолжение Pull сохраняет завершённые контрольные точки.
-- Ранее через NekoFlash разблокировали **POCO X3 Pro, POCO F5 и POCO X7 Pro**. Переписанный сценарий разблокировки ждёт повторного полного аппаратного теста.
+- **POCO F5 / marble:** Xiaomi Unlock и быстрая прошивка раздела `recovery` — FIELD PASS на Alpha15. Отдельная запись в оба слота Recovery пока не подтверждена.
 
 [Текущий статус](docs/STATUS.md) · [Аппаратные испытания](docs/HARDWARE_VALIDATION.md) · [Проблемы USB](docs/USB_CONNECTION_TROUBLESHOOTING.md)
 
