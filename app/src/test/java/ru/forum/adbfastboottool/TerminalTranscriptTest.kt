@@ -88,5 +88,9 @@ class TerminalTranscriptTest {
             assertEquals(CompactLogRenderPolicy.Tone.INFO, CompactLogRenderPolicy.format(line).tone)
         }
         assertEquals(CompactLogRenderPolicy.Tone.ERROR, CompactLogRenderPolicy.format("❌ failed").tone)
+        assertEquals(
+            CompactLogRenderPolicy.Tone.SYSTEM,
+            CompactLogRenderPolicy.format("=== FLASH QUEUE 1/2: boot ===").tone,
+        )
     }
 }
