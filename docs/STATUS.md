@@ -26,7 +26,7 @@ PR [#111](https://github.com/Ncorror/NekoFlash-2.0/pull/111) added the ADB Wi-Fi
 - Mass Flash slot selection is a full-width highlighted action fixed above the scrolling image queue, instead of a narrow control beside the destructive Execute button.
 - Wireless ADB pairing/connection and remote Device files were moved from the Sideload page to Home. The existing handlers, connection checks, and file transfers are unchanged.
 - Sideload now only displays Recovery mode guidance, the selected ZIP with Clear, Choose ZIP and Start Sideload. The repeated result disclaimer and redundant Import button were removed from this page.
-- The workspace Import path remains on the Flash tab as a fallback for file providers that cannot supply a seekable ZIP. Actual device transfer and installation status still depend on Recovery evidence.
+- Workspace Import remains directly reachable under Settings → Service, as a fallback for file providers that cannot supply a seekable ZIP; the older Fastboot-only import button is in an inactive legacy card. Actual device transfer and installation status still depend on Recovery evidence.
 - These UI changes require Android CI and manual small-screen validation before distribution; the signed public Alpha15 is unchanged.
 
 ### Unreleased workflows added in PR #111
