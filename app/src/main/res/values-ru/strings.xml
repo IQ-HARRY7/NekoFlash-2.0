@@ -65,7 +65,7 @@
     <string name="adb_wifi_connect">Подключить</string>
     <string name="adb_wifi_disconnect">Отключить ADB по Wi-Fi</string>
     <string name="adb_wifi_pairing">Сопряжение…</string>
-    <string name="adb_wifi_paired">Сопряжение готово. Используйте адрес и порт с основного экрана беспроводной отладки и нажмите «Подключить».</string>
+    <string name="adb_wifi_paired">Сопряжение завершено. Ищу порт подключения этого устройства…</string>
     <string name="adb_wifi_pair_failed">Сопряжение не удалось. Проверьте адрес, порт сопряжения и действующий код, затем попробуйте ещё раз.</string>
     <string name="adb_wifi_restart_transport">Перезапустите NekoFlash, чтобы завершить закрытие предыдущего сеанса перед подключением.</string>
     <string name="adb_wifi_endpoint">ADB по Wi-Fi · %1$s</string>
