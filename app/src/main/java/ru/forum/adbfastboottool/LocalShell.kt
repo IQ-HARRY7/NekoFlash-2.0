@@ -24,6 +24,7 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
         val lines: List<String>,
         val clearTerminal: Boolean = false,
         val deviceBinariesEnabled: Boolean = false,
+        val exitCode: Int = 0,
     )
 
     private data class CommandResult(
@@ -78,6 +79,7 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
                 cwd,
                 listOf("Unknown local command: $command") + help,
                 deviceBinariesEnabled = deviceBinariesEnabled,
+                exitCode = 127,
             )
         }
     }
@@ -206,7 +208,7 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
                         outputLines += input.orEmpty()
                     }
                 }
-                Output(cwd, outputLines, clearTerminal, deviceBinariesEnabled)
+                Output(cwd, outputLines, clearTerminal, deviceBinariesEnabled, previousExitCode)
             }
         } catch (cancelled: CancellationException) {
             committedOutput ?: throw cancelled
@@ -356,19 +358,20 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
                     confirmOverwrite = confirmOverwrite,
                     onCommitted = onCommitted,
                 )
-                CommandResult(if (output.lines.any { it.contains("Cancelled") }) 1 else 0, output.lines)
+                CommandResult(if (output.lines.any { it.contains("Cancelled") }) 130 else 0, output.lines)
             }
             "rm" -> {
                 require(input == null && args.size == 1 && !args.single().value.startsWith('-')) {
                     "Usage: rm FILE (directories and options are not supported)"
                 }
                 val file = path(args.single())
+                requireNoSymlinksForDelete(workspace, current, args.single())
                 requireMutablePath(workspace, file)
                 val before = attributes(file)
                 require(before != null && before.isRegularFile) {
                     "Not a regular file: $file (directories and symbolic links are not removed)"
                 }
-                if (!confirmDelete(file)) return CommandResult(1, listOf("↩️ Cancelled; file was left untouched"))
+                if (!confirmDelete(file)) return CommandResult(130, listOf("↩️ Cancelled; file was left untouched"))
                 checkCancelled()
                 val now = attributes(file)
                 require(now != null && now.isRegularFile && now.fileKey() == before.fileKey() &&
@@ -558,6 +561,24 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
             return output
         } finally {
             if (!move) staged.delete()
+        }
+    }
+
+    /** Never follow a user-created symlink when deleting a file. */
+    private fun requireNoSymlinksForDelete(root: File, directory: File, token: FastbootCommandLine.Token) {
+        val candidate = when {
+            token.literal.startsWith("~") && token.value == "~" -> root.toPath()
+            token.literal.startsWith("~") && token.value.startsWith("~/") ->
+                root.toPath().resolve(token.value.drop(2))
+            else -> directory.toPath().resolve(token.value)
+        }.normalize()
+        require(candidate.startsWith(root.toPath())) { "Path is outside the NekoFlash workspace: $candidate" }
+        var component = root.toPath()
+        for (part in root.toPath().relativize(candidate)) {
+            component = component.resolve(part)
+            require(!Files.isSymbolicLink(component)) {
+                "Symbolic links cannot be used for rm: $component"
+            }
         }
     }
 
@@ -760,9 +781,9 @@ internal class LocalShell(private val availableSpace: (File) -> Long) {
             "&& runs the next command only after success; | passes output to the next command.",
             "App-managed file commands stay inside Download/NekoFlash; rm removes files only and asks first.",
             "Logs and .nekoflash-* staging files can be read but not modified.",
-            "Device diagnostics default to off; enable: export NEKO_USE_DEVICE_BINARIES=1",
+            "Host Android diagnostics (not the USB target) are off by default; enable: export NEKO_USE_DEVICE_BINARIES=1",
             "Allowed diagnostics: getprop, id, uname, uptime, whoami, df, ps, date.",
-            "System diagnostics run without a shell and with the app's Android UID; su and run-as are blocked.",
+            "Host Android diagnostics use the app UID, without root; su and run-as are blocked.",
             "No shell interpreters, arbitrary executables, scripts, redirection, or root escalation are exposed.",
         )
     }

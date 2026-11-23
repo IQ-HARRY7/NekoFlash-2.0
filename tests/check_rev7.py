@@ -54,7 +54,9 @@ local_terminal_vm_blob = 'f729ec96acd1b48a069df24390acf8dd8cde67e9'
 retained_local_terminal_vm_blob = '5115ac3dbe1ea7c40a7122de33d921df10bcf082'
 # EXEC-TEST welcome banner plus ViewModel-owned, confirmation-gated rm support.
 merged_local_terminal_vm_blob = 'dfe58474085a5cb4678b56176d5b734007967f07'
-shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, merged_local_terminal_vm_blob)
+# PR #108 review: propagate nonzero exit status without claiming false success.
+reviewed_terminal_exit_vm_blob = 'f763572f3a83f76f26a13d9194d699fcaea0ad47'
+shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
@@ -100,7 +102,7 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert vm.count('AdbProtocol.ShellRedirect') == 1
         assert vm.count('redirect = redirect') == 1
         assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
-    if vm_blob == merged_local_terminal_vm_blob:
+    if vm_blob in (merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob):
         assert 'internal val localShell = LocalShell { StatFs(it.absolutePath).availableBytes }' in vm
         assert 'TerminalWelcomeMessage.build(application).forEach(::append)' in vm
         assert 'private val localTerminalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)' in vm
@@ -111,6 +113,11 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'hasUnfinishedUsbOperation()' in local_admission
         assert 'workspaceImport.isBusy' in local_admission
         assert 'internal fun answerLocalDelete(request: LocalDeleteRequest, delete: Boolean)' in vm
+        if vm_blob == reviewed_terminal_exit_vm_blob:
+            assert 'when (output.exitCode)' in vm
+            assert '0 -> logLocalTerminal("✓ ' in vm
+            assert '130 -> logLocalTerminal("! ' in vm
+            assert 'R.string.local_terminal_exit_code' in vm
 elif vm_blob != expected_blob:
     reviewed_change = (
         b'                keyDirectory = adbKeyDir,\n'

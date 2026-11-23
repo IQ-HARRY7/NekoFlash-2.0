@@ -1235,7 +1235,7 @@ class MainActivity : AppCompatActivity() {
 
         localDeleteDialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.terminal_delete_title)
-            .setMessage(getString(R.string.terminal_delete_message, request.file.name))
+            .setMessage(getString(R.string.terminal_delete_message, viewModel.localShell.prompt(request.file)))
             .setPositiveButton(R.string.delete_upper) { _, _ ->
                 viewModel.answerLocalDelete(request, delete = true)
             }

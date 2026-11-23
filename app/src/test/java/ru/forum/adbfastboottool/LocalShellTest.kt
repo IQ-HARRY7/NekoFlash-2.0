@@ -225,6 +225,35 @@ class LocalShellTest {
         assertTrue(optionLikeProperty is IllegalArgumentException)
     }
 
+    @Test fun nonZeroExitAndUserCancellationArePreserved() = withWorkspace { root ->
+        File(root, "readme.txt").writeText("hello\\n")
+        val shell = newShell()
+        val noMatches = requireNotNull(shell.execute("grep MISSING readme.txt", { root }) { false })
+        assertEquals(1, noMatches.exitCode)
+        val unknown = requireNotNull(shell.execute("unknown-tool", { root }) { false })
+        assertEquals(127, unknown.exitCode)
+        val declined = requireNotNull(shell.execute(
+            "rm readme.txt", { root },
+            confirmDelete = { false }, confirmOverwrite = { false },
+        ))
+        assertEquals(130, declined.exitCode)
+        assertTrue(File(root, "readme.txt").exists())
+        val success = requireNotNull(shell.execute("echo success", { root }) { false })
+        assertEquals(0, success.exitCode)
+    }
+
+    @Test fun rmRefusesSymlinkInsteadOfDeletingItsTarget() = withWorkspace { root ->
+        val target = File(root, "important.txt").apply { writeText("keep") }
+        Files.createSymbolicLink(File(root, "alias.txt").toPath(), target.toPath())
+        val shell = newShell()
+        val failure = runCatching {
+            shell.execute("rm alias.txt", { root }, confirmDelete = { true }, confirmOverwrite = { false })
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        assertEquals("keep", target.readText())
+        assertTrue(File(root, "alias.txt").exists())
+    }
+
     @Test fun localTokenizerErrorsDoNotMentionFastboot() = runBlocking {
         val shell = newShell()
         val error = try {
