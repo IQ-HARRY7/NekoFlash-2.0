@@ -177,8 +177,8 @@ assert 'testImplementation(\'junit:junit:4.13.2\')' in (root/'app/build.gradle')
 # Stable, reviewed Home replacement; all other original page/protocol hashes stay guarded.
 home_path = root/'app/src/main/res/layout/page_home.xml'
 raw_home = home_path.read_bytes()
-# REV48 extracts only the contextual center into its own layout.
-expected_home_blob = '7437ad7b61a11a33844f967a397317f45680840b'
+# User-approved Home ADB shortcuts replace the previous facts-only layout.
+expected_home_blob = '92dc0b00410e04621353dac2cb2c81a92c80d00f'
 assert hashlib.sha1(b'blob ' + str(len(raw_home)).encode() + b'\0' + raw_home).hexdigest() == expected_home_blob, 'Unexpected Home layout change'
 from xml.etree import ElementTree as ET
 home = ET.parse(home_path).getroot()
@@ -214,7 +214,12 @@ for i, line in enumerate(normalized_lines):
         assert line.count(b' android:visibility="gone"') == 1
         normalized_lines[i] = line.replace(b' android:visibility="gone"', b'', 1)
 original_flash = b''.join(normalized_lines)
-assert git_blob_sha(original_flash) in (expected_flash_blob, mass_flash_slots_layout_blob), 'Unexpected Fastboot layout change'
+# The approved Mass Flash selector now stays above the scrolling queue.
+# Keep the full new file pinned while retaining normalized older snapshots.
+approved_sticky_slot_flash_blob = '7daa9ab2357c0df239348f3961ddf33468ee3ead'
+assert git_blob_sha(original_flash) in (expected_flash_blob, mass_flash_slots_layout_blob) or (
+    git_blob_sha(raw_flash) == approved_sticky_slot_flash_blob
+), 'Unexpected Fastboot layout change'
 flash = ET.parse(flash_path).getroot()
 flash_ids = [node.attrib.get(a+'id','') for node in flash.iter()]
 for key in ['fastbootQuickSection','fastbootMassSection','fastbootToolsSection','btnQuickExecute','btnMassExecute','toolBlockInfo','toolBlockPartitions','toolBlockSlots','toolBlockDynamic']:
