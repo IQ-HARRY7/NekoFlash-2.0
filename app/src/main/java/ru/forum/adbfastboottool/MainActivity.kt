@@ -681,7 +681,7 @@ class MainActivity : AppCompatActivity() {
             clearSideloadSelection()
         }
         updateSideloadSelectionUi()
-        // Wireless ADB and remote files are Home shortcuts; the workspace importer stays on Fastboot.
+        // Wireless ADB and remote files are Home shortcuts; workspace Import is in Settings.
         findViewById<View>(R.id.btnAdbDeviceFiles).setOnClickListener { openAdbDeviceFiles() }
         findViewById<View>(R.id.btnAdbWifi).setOnClickListener { openAdbWifiDialog() }
 
@@ -3617,6 +3617,8 @@ class MainActivity : AppCompatActivity() {
         container.addView(sectionTitle(getString(R.string.settings_section_service)))
         val svcCard = card()
         svcCard.addView(row(getString(R.string.layout_reports_menu)) { showReportsMenu() })
+        svcCard.addView(row(getString(R.string.settings_import_workspace),
+            getString(R.string.settings_import_workspace_sub)) { startImportFilePicker() })
         svcCard.addView(row(getString(R.string.settings_clear_workspace),
             getString(R.string.settings_clear_workspace_sub)) { confirmClearWorkspace() })
         svcCard.addView(row(getString(R.string.settings_about),
