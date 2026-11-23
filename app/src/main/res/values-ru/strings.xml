@@ -294,6 +294,8 @@
     <string name="settings_telegram">Telegram</string>
     <string name="settings_telegram_sub">Группа тестировщиков NekoFlash</string>
     <string name="settings_link_open_error">Не удалось открыть ссылку: %1$s</string>
+    <string name="settings_import_workspace">Импорт в рабочую папку</string>
+    <string name="settings_import_workspace_sub">Скопировать файл в Download/NekoFlash</string>
     <string name="settings_clear_workspace">🗑 Очистить рабочую папку</string>
     <string name="settings_clear_workspace_sub">Удалить импортированные файлы из рабочей папки</string>
     <string name="settings_clear_workspace_confirm">Удалить все файлы в:
@@ -631,7 +633,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev12_sideload_cancelled">ADB Sideload отменён.</string>
     <string name="rev12_sideload_mode_inactive">ADB Sideload не активен. Режим устройства: %1$s.</string>
     <string name="rev12_sideload_failed">Ошибка ADB Sideload (%1$s): %2$s.</string>
-    <string name="rev12_sideload_saf_unsupported">Документ нельзя прочитать напрямую. На вкладке «Прошить» импортируйте его в Download/NekoFlash, затем выберите скопированный ZIP для Sideload.</string>
+    <string name="rev12_sideload_saf_unsupported">Документ нельзя прочитать напрямую. Откройте Настройки → Импорт в рабочую папку, затем выберите скопированный ZIP для Sideload.</string>
     <string name="rev13_fastboot_slot_error">Не удалось определить слот Fastboot для раздела %1$s.</string>
     <string name="rev13_direct_saf_failed">Нельзя прошить выбранный документ напрямую. Провайдер может не поддерживать произвольное чтение или недоступен Native USBFS. Выбери образ из рабочей папки NekoFlash.</string>
     <string name="rev13_picker_no_document">Android не вернул выбранный образ.</string>
