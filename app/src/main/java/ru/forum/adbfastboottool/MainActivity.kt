@@ -681,7 +681,7 @@ class MainActivity : AppCompatActivity() {
             clearSideloadSelection()
         }
         updateSideloadSelectionUi()
-        findViewById<View>(R.id.btnSideloadImport).setOnClickListener { startImportFilePicker() }
+        // Wireless ADB and remote files are Home shortcuts; the workspace importer stays on Fastboot.
         findViewById<View>(R.id.btnAdbDeviceFiles).setOnClickListener { openAdbDeviceFiles() }
         findViewById<View>(R.id.btnAdbWifi).setOnClickListener { openAdbWifiDialog() }
 
