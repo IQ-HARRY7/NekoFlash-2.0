@@ -83,19 +83,22 @@ object FlashOperationDraftPolicy {
 
     internal fun isSlotOverride(slot: String): Boolean = slot == "a" || slot == "b" || slot == "all"
 
+    internal fun isExplicitSlotTarget(partition: String): Boolean {
+        val name = partition.substringBefore(':').trim()
+        // Combined firmware names such as xbl_ab are literal targets too.
+        return name.endsWith("_a", true) || name.endsWith("_b", true) || name.endsWith("_ab", true)
+    }
+
     internal fun resolveTargets(
         partition: String,
         slot: String?,
         resolve: (String, String) -> List<String>?
-    ): List<String>? {
-        val name = partition.substringBefore(':')
-        // Explicit A/B targets and combined firmware names such as xbl_ab are literal queue entries.
-        return if (slot == null || name.endsWith("_a", true) || name.endsWith("_b", true) || name.endsWith("_ab", true)) {
+    ): List<String>? =
+        if (slot == null || isExplicitSlotTarget(partition)) {
             listOf(partition)
         } else {
             resolve(partition, slot)
         }
-    }
 
     fun resolve(item: FlashQueueDraftItem): File? = runCatching {
         val uri = URI(item.sourceUri)

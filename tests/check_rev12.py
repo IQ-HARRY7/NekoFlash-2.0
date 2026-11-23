@@ -33,7 +33,10 @@ rev58_checkpointed_pull_adb_hash = 'cbca9c738c00950aeb899c3e3fd0150998e32c63'
 # ADB guard unchanged. Stdout display is skipped only while a redirect is active;
 # stderr, packet transport, retries and reconnect behavior are not touched.
 rev59_shell_redirect_adb_hash = '8f1a6a97c3eee6d7c58839722079d0a190496fa1'
-adb_workflows_source = raw_source_git_sha(data) == 'c1627733b4006670b72a00f6ce723fd1bf9c886d'
+adb_workflows_source = raw_source_git_sha(data) in {
+    'c1627733b4006670b72a00f6ce723fd1bf9c886d',  # Batch transfers, directory listing, and wireless transport.
+    'bda5e1a9dfa5df9c1d76514e66c0a02211a8a847',  # Shared SEND source, bounded metadata read, and reboot disconnect.
+}
 if raw_source_git_sha(data) == rev59_shell_redirect_adb_hash:
     rev59_reviewed_hunks = [
         ('    enum class PeerMode { DEVICE, RECOVERY, SIDELOAD, UNKNOWN }\n\n    /** Host-side stdout redirect of a one-shot shell command: `adb logcat > file`. */\n    data class ShellRedirect(val target: File, val append: Boolean)\n\n    enum class SideloadFailureKind { FILE, TRANSPORT, PROTOCOL }\n',

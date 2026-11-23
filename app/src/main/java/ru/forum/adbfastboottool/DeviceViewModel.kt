@@ -4,11 +4,13 @@ import android.app.Application
 import android.content.Context
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
+import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
 import android.os.StatFs
 import android.os.SystemClock
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
@@ -29,6 +31,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -226,9 +229,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private val pendingQueueSources = mutableMapOf<String, Long>()
     private val _queueSourceState = MutableLiveData(QueueSourceState())
     internal val queueSourceState: LiveData<QueueSourceState> = _queueSourceState
-
-    /** Transient execution object. Only the lightweight draft is persisted. */
-    internal data class FlashQueueItem(val partition: String, val selection: FirmwareSelection)
 
     private data class PendingUnlockVerification(
         val product: String,
@@ -832,13 +832,26 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun connectAdbLocked(proto: AdbProtocol, generation: Long) {
         proto.onTransportFailure = { code, message ->
-            if (!viewModelCleared.get() && generation == connectionGeneration.get()) {
-                diagnosticSessionTracker.recordTermination("ADB_READER_${code.name}")
-                _adbAndroidRelease.postValue(null)
-                diagnosticSessionTracker.recordMilestone("adb.reader.failure", 0L)
-                persistSessionSummary()
-                _connectionState.postValue(ConnectionState.ERROR)
-                log("⛔ ADB transport stopped [${code.name}]: $message. Auto-retry is forbidden until manual reconnection.")
+            synchronized(operationLaunchLock) {
+                if (!viewModelCleared.get() && generation == connectionGeneration.get()) {
+                    diagnosticSessionTracker.recordTermination("ADB_READER_${code.name}")
+                    _adbAndroidRelease.postValue(null)
+                    diagnosticSessionTracker.recordMilestone("adb.reader.failure", 0L)
+                    persistSessionSummary()
+                    _connectionState.postValue(ConnectionState.ERROR)
+                    log("⛔ ADB transport stopped [${code.name}]: $message. Auto-retry is forbidden until manual reconnection.")
+                }
+            }
+        }
+        if (proto.isWireless) {
+            proto.onExpectedRebootDisconnect = {
+                synchronized(operationLaunchLock) {
+                    if (!viewModelCleared.get() && generation == connectionGeneration.get() && adbProtocol === proto) {
+                        adbProtocol = null
+                        // Reboot acceptance is resolved by the operation; only the connection ended.
+                        publishDisconnectedState("expected Wi-Fi ADB reboot")
+                    }
+                }
             }
         }
         var published = false
@@ -852,11 +865,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             diagnosticSessionTracker.recordMilestone("adb.connect", (System.nanoTime() - connectStartedNs) / 1_000_000L)
             if (viewModelCleared.get() || generation != connectionGeneration.get()) return
 
-            adbProtocol = proto
-            published = true
-            _fastbootDiagnostics.postValue(null)
-            _fastbootPartitionInventory.postValue(null)
-            _adbPeerMode.postValue(proto.peerMode)
             verifyPendingSideloadIfReady(proto)
             // Recovery installers can boot straight back into SIDELOAD, not RECOVERY.
             // Record the switch as a postcondition; never infer ZIP install SUCCESS.
@@ -870,27 +878,25 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             } else if (proto.peerMode != AdbProtocol.PeerMode.SIDELOAD) {
                 preparedRecoveryLog = null
             }
-            _connectionState.postValue(ConnectionState.ADB)
-            diagnosticSessionTracker.recordConnection("ADB", connectedDeviceInfo)
-            persistSessionSummary()
-            logConnectionStatus()
-            if (proto.peerMode == AdbProtocol.PeerMode.DEVICE) {
-                // Informational read only, on the IO scope and a separate ADB stream.
-                // Never block ADB readiness or repeat on Activity rotation.
-                transportScope.launch {
-                    val result = runCatching {
-                        proto.captureShellCommand("getprop ro.build.version.release")
-                    }.getOrNull()
-                    val release = result?.let {
-                        AndroidReleaseMetadataPolicy.parse(it.stdout, it.success, it.exitCode)
-                    }
-                    if (!viewModelCleared.get() &&
-                        generation == connectionGeneration.get() &&
-                        adbProtocol === proto && proto.isConnected &&
-                        proto.peerMode == AdbProtocol.PeerMode.DEVICE) {
-                        _adbAndroidRelease.postValue(release)
-                    }
-                }
+            // ADB stream consumers share the same packet queue. Finish this optional
+            // read within the connection job before exposing the transport to commands.
+            val release = if (proto.peerMode == AdbProtocol.PeerMode.DEVICE) {
+                runCatching {
+                    proto.captureShellCommand("getprop ro.build.version.release", readBudgetMs = 3_000)
+                }.getOrNull()?.let { AndroidReleaseMetadataPolicy.parse(it.stdout, it.success, it.exitCode) }
+            } else null
+            synchronized(operationLaunchLock) {
+                if (viewModelCleared.get() || generation != connectionGeneration.get() || !proto.isConnected) return
+                adbProtocol = proto
+                published = true
+                _fastbootDiagnostics.postValue(null)
+                _fastbootPartitionInventory.postValue(null)
+                _adbPeerMode.postValue(proto.peerMode)
+                _adbAndroidRelease.postValue(release)
+                diagnosticSessionTracker.recordConnection("ADB", connectedDeviceInfo)
+                persistSessionSummary()
+                logConnectionStatus()
+                _connectionState.postValue(ConnectionState.ADB)
             }
         } finally {
             if (!published || generation != connectionGeneration.get() || viewModelCleared.get()) {
@@ -993,7 +999,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         _fastbootDiagnostics.postValue(null)
         _fastbootPartitionInventory.postValue(null)
         _adbPeerMode.postValue(null)
-        _operationActive.postValue(false)
         _connectionState.postValue(ConnectionState.NONE)
         diagnosticSessionTracker.recordConnection("NONE", reason)
         persistSessionSummary()
@@ -1585,13 +1590,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             val proto = adbProtocol ?: failOperation(text(R.string.error_no_adb))
             if (!proto.runService(service)) failOperation("ADB service failed: $service")
             if (AdbServiceCompletionPolicy.expectsOneWayDisconnect(service)) {
-                postOperationProgress(
-                    OperationProgress(
-                        title = text(R.string.notif_adb_command),
-                        percent = 100,
-                        detail = "Reboot command sent. The device will temporarily disconnect and appear in the new mode."
-                    )
-                )
+                confirmSuccess("Reboot command sent. The device will temporarily disconnect and appear in the new mode.")
             }
         }
     }
@@ -1682,6 +1681,64 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    internal data class AdbPushLocation(val protocol: AdbProtocol, val directory: String)
+
+    // The document picker can return to a recreated Activity in the same device session.
+    internal var pendingAdbPushLocation: AdbPushLocation? = null
+
+    internal fun runAdbPushDocuments(documents: List<Uri>, location: AdbPushLocation): Boolean {
+        return startOperation(
+            text(R.string.notif_adb_command),
+            text(R.string.notif_executing, "push ${location.directory}"),
+            requiredTransport = UsbOperationAdmission.RequiredTransport.ADB
+        ) {
+            val protocol = location.protocol
+            if (adbProtocol !== protocol || !protocol.isConnected) {
+                failOperation(text(R.string.adb_device_files_connection_changed))
+            }
+            val context = kotlinx.coroutines.currentCoroutineContext()
+            val resolver = getApplication<Application>().contentResolver
+            val columns = arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE)
+            val sources = documents.mapIndexed { index, uri ->
+                context.ensureActive()
+                var name: String? = null
+                var size: Long? = null
+                runCatching {
+                    resolver.query(uri, columns, null, null, null)?.use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                            val sizeIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                            if (nameIndex >= 0) name = cursor.getString(nameIndex)
+                            if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) {
+                                size = cursor.getLong(sizeIndex).takeIf { it >= 0 }
+                            }
+                        }
+                    }
+                }
+                context.ensureActive()
+                val filename = name?.takeIf(AdbDeviceDirectory::isChildName)
+                    ?: uri.lastPathSegment?.substringAfterLast('/')?.takeIf(AdbDeviceDirectory::isChildName)
+                    ?: "document-${index + 1}"
+                AdbProtocol.PushSource(filename, size, (System.currentTimeMillis() / 1000L).toInt()) {
+                    context.ensureActive()
+                    val descriptor = resolver.openAssetFileDescriptor(uri, "r")
+                        ?: throw IOException("Could not open selected document: $filename")
+                    val input = try { descriptor.createInputStream() } catch (error: Exception) {
+                        descriptor.close()
+                        throw error
+                    }
+                    CancellableProviderInputStream(input, descriptor.fileDescriptor) {
+                        context.ensureActive()
+                        if (!protocol.isConnected) throw IOException("ADB transport disconnected")
+                    }
+                }
+            }
+            if (!protocol.pushDocuments(sources, location.directory, context::ensureActive)) {
+                failOperation("ADB push failed")
+            }
+        } != null
+    }
+
     fun runAdbPull(remotePath: String, localFile: File) {
         runAdbPull(listOf(remotePath), localFile)
     }
@@ -1750,8 +1807,12 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         ) {
             val proto = fastbootProtocol ?: failOperation(text(R.string.error_no_fastboot))
             if (!proto.isConnected) failOperation(text(R.string.error_no_fastboot))
-            val targets = proto.resolveSlotPartitionTargets(partition, slot)
-                ?: failOperation(text(R.string.rev13_fastboot_slot_error, partition))
+            val targets = if (slot == null && FlashOperationDraftPolicy.isExplicitSlotTarget(partition)) {
+                listOf(partition)
+            } else {
+                proto.resolveSlotPartitionTargets(partition, slot)
+                    ?: failOperation(text(R.string.rev13_fastboot_slot_error, partition))
+            }
             val context = kotlinx.coroutines.currentCoroutineContext()
             targets.forEach { target ->
                 val result = flashImage(proto, target, source, expectedSizeBytes = expectedSizeBytes) { context.ensureActive() }
@@ -1976,6 +2037,25 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         if (selected != draft) publishFlashOperationDraft(selected, persist = true)
     }
 
+    internal suspend fun previewFlashQueueDraft(draft: FlashOperationDraft): List<MassFlashPlan.Step> =
+        withContext(Dispatchers.IO) {
+            val generation = connectionGeneration.get()
+            val proto = fastbootProtocol
+            val steps = MassFlashPlan.resolve(draft) { partition, slot ->
+                ensureActive()
+                val available = synchronized(operationLaunchLock) {
+                    !viewModelCleared.get() && generation == connectionGeneration.get() &&
+                        proto === fastbootProtocol && proto?.isConnected == true &&
+                        connectionJob?.isCompleted != false && !hasUnfinishedUsbOperation()
+                }
+                // The existing resolver holds the Fastboot transaction lock for its getvar sequence.
+                if (available) proto?.resolveSlotPartitionTargets(partition, slot) else null
+            }
+            if (generation == connectionGeneration.get() && proto === fastbootProtocol &&
+                (proto == null || proto.isConnected)
+            ) steps else MassFlashPlan.resolve(draft) { _, _ -> null }
+        }
+
     fun executeFlashQueueDraft() {
         if (synchronized(flashDraftLock) { pendingQueueSources.isNotEmpty() }) {
             log(text(R.string.rev24_queue_checking, synchronized(flashDraftLock) { pendingQueueSources.keys.joinToString() }))
@@ -1986,8 +2066,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             log(text(R.string.flash_queue_empty_log))
             return
         }
-        val executionItems = draft.items.map { FlashQueueItem(it.partition, FirmwareSelection.from(it)) }
-        runFlashQueue(executionItems, draft.slot)
+        runFlashQueue(draft)
     }
 
     private fun publishFlashOperationDraft(draft: FlashOperationDraft, persist: Boolean) {
@@ -1999,81 +2078,106 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         _flashOperationDraft.value = draft
     }
 
-    private fun runFlashQueue(items: List<FlashQueueItem>, slot: String?) {
-        val ordered = items.filter { it.partition.isNotBlank() }
-        if (ordered.isEmpty()) { log(text(R.string.flash_queue_empty_log)); return }
-
-        fun publishQueueSteps(targets: List<FlashQueueItem>) {
+    private fun runFlashQueue(draft: FlashOperationDraft) {
+        val ordered = draft.items
+        val requested = MassFlashPlan.resolve(draft.copy(slot = null)) { _, _ -> null }
+        fun publishQueueSteps(targets: List<MassFlashPlan.Step>) {
             setOperationSteps(targets.mapIndexed { index, item ->
                 OperationStep(
                     index = index + 1,
                     total = targets.size,
-                    title = "flash ${item.partition} ← ${item.selection.displayName}",
-                    subtitle = formatBytesShort(requireNotNull(item.selection.expectedSizeBytes)),
+                    title = "flash ${item.target ?: item.source.partition} ← ${item.source.displayName}",
+                    subtitle = formatBytesShort(item.source.expectedSizeBytes),
                     status = OperationStepStatus.PENDING
                 )
             })
         }
 
-        val slotLabel = slot?.let { " --slot=$it" }.orEmpty()
+        val slotLabel = draft.slot?.let { " --slot=$it" }.orEmpty()
         startOperation(text(R.string.notif_flash_img), "Flash queue: ${ordered.size} item(s)$slotLabel. Do not disconnect the cable.", requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT) {
-            publishQueueSteps(ordered)
-            val proto = fastbootProtocol
-            if (proto?.isConnected != true) {
-                markOperationStep(1, OperationStepStatus.FAILED, text(R.string.error_no_fastboot))
-                failOperation("No Fastboot connection")
+            fun failStep(index: Int, reason: String): Nothing {
+                markOperationStep(index + 1, OperationStepStatus.FAILED, reason)
+                val summary = completeFlashQueueSteps(R.string.mass_flash_step_not_run)
+                failOperation("$reason\n$summary")
             }
-            val context = kotlinx.coroutines.currentCoroutineContext()
-            // Probe every source before the first download; persisted URI metadata is not a grant.
-            ordered.forEachIndexed { index, item ->
-                try { item.selection.verify(getApplication<Application>().contentResolver) { context.ensureActive() } }
-                catch (cancelled: CancellationException) { throw cancelled }
-                catch (error: Exception) {
-                    val reason = text(R.string.rev24_source_unavailable, item.selection.displayName, error.message ?: error.javaClass.simpleName)
-                    markOperationStep(index + 1, OperationStepStatus.FAILED, reason)
-                    failOperation(reason)
+
+            publishQueueSteps(requested)
+            try {
+                val proto = fastbootProtocol
+                if (proto?.isConnected != true) failStep(0, text(R.string.error_no_fastboot))
+                val context = kotlinx.coroutines.currentCoroutineContext()
+                // Probe every source before the first download; persisted URI metadata is not a grant.
+                ordered.forEachIndexed { index, item ->
+                    try {
+                        FirmwareSelection.from(item).verify(getApplication<Application>().contentResolver) { context.ensureActive() }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        val reason = text(R.string.rev24_source_unavailable, item.displayName, error.message ?: error.javaClass.simpleName)
+                        failStep(index, reason)
+                    }
                 }
-            }
-            // Each expanded slot stays adjacent to its source row in operator-defined order.
-            val resolved = if (slot == null) ordered else ordered.flatMapIndexed { index, item ->
+                val resolved = MassFlashPlan.resolve(draft) { partition, slot ->
+                    context.ensureActive()
+                    proto.resolveSlotPartitionTargets(partition, slot)
+                }
                 context.ensureActive()
-                val targets = FlashOperationDraftPolicy.resolveTargets(item.partition, slot, proto::resolveSlotPartitionTargets)
-                if (targets == null) {
-                    val reason = text(R.string.rev13_fastboot_slot_error, item.partition)
-                    markOperationStep(index + 1, OperationStepStatus.FAILED, reason)
-                    failOperation(reason)
+                if (resolved != requested) publishQueueSteps(resolved)
+                val unresolved = resolved.indexOfFirst { it.target == null }
+                if (unresolved >= 0) {
+                    failStep(unresolved, text(R.string.rev13_fastboot_slot_error, resolved[unresolved].source.partition))
                 }
-                targets.map { target -> item.copy(partition = target) }
+                val repeated = MassFlashPlan.repeatedTargets(resolved)
+                if (repeated.isNotEmpty()) log(text(R.string.mass_flash_repeated_targets, repeated.joinToString()))
+
+                resolved.forEachIndexed { index, item ->
+                    context.ensureActive()
+                    val target = requireNotNull(item.target)
+                    val stepNumber = index + 1
+                    markOperationStep(stepNumber, OperationStepStatus.RUNNING, "fastboot flash $target")
+                    log("=== FLASH QUEUE $stepNumber/${resolved.size}: $target ← ${item.source.displayName} ===")
+                    val result = try {
+                        flashImage(proto, target, FirmwareSelection.from(item.source).source(), expectedSizeBytes = item.source.expectedSizeBytes) { context.ensureActive() }
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        failStep(index, text(R.string.mass_flash_step_error, target, error.message ?: error.javaClass.simpleName))
+                    }
+                    val diagnostics = proto.currentDiagnostics()
+                    if (diagnostics != null) _fastbootDiagnostics.postValue(diagnostics)
+                    if (!result.success) {
+                        context.ensureActive()
+                        failStep(index, formatFlashFailure(target, result))
+                    }
+                    markOperationStep(stepNumber, OperationStepStatus.OK, diagnosticsBrief(diagnostics))
+                }
+                val summary = completeFlashQueueSteps(R.string.mass_flash_step_not_run)
+                log("✅ $summary")
+                confirmSuccess(summary)
+            } catch (cancelled: CancellationException) {
+                log(completeFlashQueueSteps(R.string.operation_cancelled))
+                throw cancelled
             }
-            if (resolved != ordered) publishQueueSteps(resolved)
-            resolved.forEachIndexed { index, item ->
-                context.ensureActive()
-                val stepNumber = index + 1
-                markOperationStep(stepNumber, OperationStepStatus.RUNNING, "fastboot flash ${item.partition}")
-                log("=== FLASH QUEUE ${stepNumber}/${resolved.size}: ${item.partition} ← ${item.selection.displayName} ===")
-                val result = try {
-                    flashImage(proto, item.partition, item.selection.source(), expectedSizeBytes = item.selection.expectedSizeBytes) { context.ensureActive() }
-                } catch (cancelled: CancellationException) {
-                    markOperationStep(stepNumber, OperationStepStatus.SKIPPED, text(R.string.operation_cancelled))
-                    throw cancelled
-                } catch (error: Exception) {
-                    markOperationStep(stepNumber, OperationStepStatus.FAILED, error.message ?: error.javaClass.simpleName)
-                    throw error
-                }
-                val diagnostics = proto.currentDiagnostics()
-                if (diagnostics != null) _fastbootDiagnostics.postValue(diagnostics)
-                markOperationStep(
-                    stepNumber,
-                    if (result.success) OperationStepStatus.OK else OperationStepStatus.FAILED,
-                    diagnosticsBrief(diagnostics)
-                )
-                if (!result.success) {
-                    log("❌ Queue stopped at partition ${item.partition}")
-                    failOperation(formatFlashFailure(item.partition, result))
-                }
-            }
-            log("✅ Flash queue completed")
         }
+    }
+
+    private fun completeFlashQueueSteps(skippedDetail: Int): String {
+        val finalSteps = synchronized(operationStepLock) {
+            operationStepSnapshot.map { step ->
+                when (step.status) {
+                    OperationStepStatus.PENDING, OperationStepStatus.RUNNING ->
+                        step.copy(status = OperationStepStatus.SKIPPED, subtitle = text(skippedDetail))
+                    else -> step
+                }
+            }
+        }
+        setOperationSteps(finalSteps)
+        return text(
+            R.string.mass_flash_result,
+            finalSteps.count { it.status == OperationStepStatus.OK },
+            finalSteps.count { it.status == OperationStepStatus.FAILED },
+            finalSteps.count { it.status == OperationStepStatus.SKIPPED }
+        )
     }
 
 

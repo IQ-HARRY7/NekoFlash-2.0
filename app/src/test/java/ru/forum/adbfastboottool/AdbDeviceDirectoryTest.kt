@@ -29,7 +29,9 @@ class AdbDeviceDirectoryTest {
     }
 
     @Test fun distinguishesDoneFromAnInterruptedOrRejectedListing() {
-        assertEquals(emptyList<AdbDeviceDirectory.Entry>(), read(done()))
+        val emptyDirectory = dent(".", directory = true) + dent("..", directory = true) + done()
+        assertEquals(emptyList<AdbDeviceDirectory.Entry>(), read(emptyDirectory))
+        assertThrows(IOException::class.java) { read(done()) }
         assertThrows(EOFException::class.java) { read(dent("one.txt", directory = false)) }
         val message = "Permission denied"
         val fail = buffer(8).put("FAIL".toByteArray()).putInt(message.length).array() + message.toByteArray()

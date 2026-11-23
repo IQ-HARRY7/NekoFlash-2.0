@@ -31,6 +31,7 @@ internal class MassFlashQueueUi(
     }
     val header: View = activity.layoutInflater.inflate(R.layout.view_mass_flash_header, list, false)
     val execute: MaterialButton = activity.findViewById(R.id.btnMassExecute)
+    val preview: MaterialButton = header.findViewById(R.id.btnMassPreview)
     private val slotButton: MaterialButton = activity.findViewById(R.id.btnMassSlot)
     private val slotChoices = listOf(
         null to R.string.mass_flash_slot_as_listed,
@@ -97,6 +98,7 @@ internal class MassFlashQueueUi(
         val context = heading.context
         heading.text = if (draft.isEmpty) context.getString(R.string.flash_rev7_queue_empty)
             else context.getString(R.string.flash_rev7_queue_count, draft.items.size)
+        preview.isVisible = !draft.isEmpty
         empty.isVisible = draft.isEmpty && sources.pending.isEmpty()
         sourcesText.text = listOfNotNull(
             sources.pending.takeIf { it.isNotEmpty() }?.let {
@@ -113,6 +115,21 @@ internal class MassFlashQueueUi(
         val choice = slotChoices.firstOrNull { it.first == slot }?.second ?: R.string.mass_flash_slot_as_listed
         val context = slotButton.context
         return context.getString(R.string.mass_flash_slot_value, context.getString(choice))
+    }
+
+    fun planRows(steps: List<MassFlashPlan.Step>): List<String> {
+        val context = preview.context
+        val repeated = MassFlashPlan.repeatedTargets(steps)
+        return steps.mapIndexed { index, step ->
+            val target = step.target
+            val label = when {
+                target == null -> context.getString(R.string.mass_flash_preview_unresolved, step.source.partition)
+                target in repeated -> context.getString(R.string.mass_flash_preview_repeated, target)
+                else -> target
+            }
+            val ordinal: Int = index + 1
+            context.getString(R.string.mass_flash_preview_row, ordinal, label, step.source.displayName)
+        }
     }
 
     fun saveFormState(): Bundle = Bundle().apply {

@@ -65,4 +65,19 @@ class MassFlashQueueUiTest {
             assertEquals(activity.getString(R.string.mass_flash_slot_value, allLabel), slotButton.text.toString())
         } finally { controller.pause().stop().destroy() }
     }
+
+    @Test
+    @Config(qualifiers = "land")
+    fun landscapeQueueShowsThePreviewControlForASelectedImage() {
+        val controller = Robolectric.buildActivity(Screen::class.java).setup()
+        try {
+            val ui = MassFlashQueueUi(controller.get(), { _, _ -> }, {}, {})
+            ui.render(FlashOperationDraft(), QueueSourceState())
+            assertEquals(View.GONE, ui.preview.visibility)
+
+            val image = FlashQueueDraftItem("recovery", "file:///tmp/recovery.img", "recovery.img", 1L, 1L)
+            ui.render(FlashOperationDraft(listOf(image)), QueueSourceState())
+            assertEquals(View.VISIBLE, ui.preview.visibility)
+        } finally { controller.pause().stop().destroy() }
+    }
 }
