@@ -12,6 +12,7 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import androidx.core.net.toUri
 import androidx.fragment.app.DialogFragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -47,7 +48,7 @@ internal class MassFlashImageMappingDialog : DialogFragment() {
             val add = dialog.getButton(DialogInterface.BUTTON_POSITIVE)
             add.isEnabled = false
             lifecycleScope.launch {
-                val names = withContext(Dispatchers.IO) { uris.map { readDisplayName(resolver, Uri.parse(it), unnamed) } }
+                val names = withContext(Dispatchers.IO) { uris.map { readDisplayName(resolver, it.toUri(), unnamed) } }
                 if (this@MassFlashImageMappingDialog.dialog !== dialog) return@launch
                 content.removeAllViews()
                 editors.clear()
@@ -121,7 +122,7 @@ internal class MassFlashImageMappingDialog : DialogFragment() {
             val names = result.getStringArrayList(NAMES).orEmpty()
             val partitions = result.getStringArrayList(PARTITIONS).orEmpty()
             return uris.zip(names).zip(partitions) { (uri, name), partition ->
-                partition to FirmwareSource.SafDocument(Uri.parse(uri), name)
+                partition to FirmwareSource.SafDocument(uri.toUri(), name)
             }
         }
 

@@ -9,4 +9,11 @@
     <issue id="GradleDependency">
         <ignore regexp="A newer version of androidx[.]core:core-ktx than 1[.]17[.]0 is available" />
     </issue>
+
+    <!-- Lint flags an unused EST helper and abstract BCJSSE methods in these
+         pinned jars. adb-kt uses lightweight TLS and PEM/X.509 utilities. -->
+    <issue id="TrustAllX509TrustManager">
+        <ignore regexp="(^|/)org[.]bouncycastle/bcpkix-jdk18on/1[.]85/[0-9a-f]+/bcpkix-jdk18on-1[.]85[.]jar$" />
+        <ignore regexp="(^|/)org[.]bouncycastle/bctls-jdk18on/1[.]85/[0-9a-f]+/bctls-jdk18on-1[.]85[.]jar$" />
+    </issue>
 </lint>

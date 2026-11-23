@@ -1,5 +1,6 @@
 package ru.forum.adbfastboottool
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -2424,6 +2425,7 @@ class MainActivity : AppCompatActivity() {
         adbWifiDialog = AdbWifiDialog(this, viewModel, lifecycleScope, adbWifiDraft) { adbWifiDraft = it }.show()
     }
 
+    @SuppressLint("SdCardPath") // The path belongs to the connected ADB device.
     private fun openAdbDeviceFiles(
         protocol: AdbProtocol? = viewModel.adbProtocol,
         directory: String = "/sdcard"
@@ -2553,12 +2555,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun queryFileSize(uri: Uri): Long? = runCatching {
-        contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        val cursor = contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?: return@runCatching null
+        try {
             if (cursor.moveToFirst() && !cursor.isNull(0)) {
                 cursor.getLong(0).takeIf { it >= 0L }
             } else {
                 null
             }
+        } finally {
+            cursor.close()
         }
     }.getOrNull()
 
