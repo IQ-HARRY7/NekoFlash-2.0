@@ -45,7 +45,15 @@
     <string name="adb_device_files_no_entries">Нет файлов и папок для отображения.</string>
     <string name="adb_device_files_connection_changed">Подключение ADB изменилось. Откройте файлы устройства заново.</string>
     <string name="adb_wifi_title">ADB по Wi-Fi</string>
-    <string name="adb_wifi_instructions">На целевом устройстве откройте «Для разработчиков › Беспроводная отладка» (Android 11 или новее). Вставьте IP-адрес и порт с основного экрана в поле адреса или укажите их отдельно. Порт сопряжения и код появятся после выбора «Сопряжение с помощью кода».</string>
+    <string name="adb_wifi_discovery_guide">На целевом телефоне: Для разработчиков → Беспроводная отладка → Сопряжение с помощью кода. Адрес и порты найдём автоматически.</string>
+    <string name="adb_wifi_discovery_searching">Поиск устройств ADB в Wi-Fi…</string>
+    <string name="adb_wifi_discovery_found">Найдены службы ADB по Wi-Fi</string>
+    <string name="adb_wifi_discovery_unavailable">Автопоиск недоступен. Проверь Wi-Fi/VPN или введи адрес вручную.</string>
+    <string name="adb_wifi_discovery_pair_device">Сопряжение · %1$s:%2$d</string>
+    <string name="adb_wifi_discovery_connect_device">Подключение · %1$s:%2$d</string>
+    <string name="adb_wifi_discovery_wait_connect">Сопряжение завершено. Ожидаю порт подключения…</string>
+    <string name="adb_wifi_manual_expand">Ввести адрес вручную (дополнительно)</string>
+    <string name="adb_wifi_discovery_rescan">Найти заново</string>
     <string name="adb_wifi_host">IP-адрес, имя хоста или IP:порт</string>
     <string name="adb_wifi_connection_port">Порт подключения</string>
     <string name="adb_wifi_pairing_port">Порт сопряжения</string>
@@ -57,7 +65,7 @@
     <string name="adb_wifi_connect">Подключить</string>
     <string name="adb_wifi_disconnect">Отключить ADB по Wi-Fi</string>
     <string name="adb_wifi_pairing">Сопряжение…</string>
-    <string name="adb_wifi_paired">Сопряжение готово. Используйте адрес и порт с основного экрана беспроводной отладки и нажмите «Подключить».</string>
+    <string name="adb_wifi_paired">Сопряжение завершено. Ищу порт подключения этого устройства…</string>
     <string name="adb_wifi_pair_failed">Сопряжение не удалось. Проверьте адрес, порт сопряжения и действующий код, затем попробуйте ещё раз.</string>
     <string name="adb_wifi_restart_transport">Перезапустите NekoFlash, чтобы завершить закрытие предыдущего сеанса перед подключением.</string>
     <string name="adb_wifi_endpoint">ADB по Wi-Fi · %1$s</string>
@@ -548,7 +556,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="mass_flash_loading_images">Загрузка имён файлов…</string>
     <string name="mass_flash_add_to_queue">Добавить в очередь</string>
     <string name="mass_flash_slot_title">Слот для очереди</string>
-    <string name="mass_flash_slot_as_listed">Как в очереди</string>
+    <string name="mass_flash_slot_as_listed">Текущий</string>
     <string name="mass_flash_slot_value">Слот · %1$s</string>
     <string name="mass_flash_preview_button">План</string>
     <string name="mass_flash_preview_title">План прошивки</string>

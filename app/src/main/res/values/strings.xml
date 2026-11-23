@@ -45,7 +45,15 @@
     <string name="adb_device_files_no_entries">No files or folders to display.</string>
     <string name="adb_device_files_connection_changed">The ADB connection changed. Reopen Device files.</string>
     <string name="adb_wifi_title">ADB over Wi-Fi</string>
-    <string name="adb_wifi_instructions">On the target, open Developer options › Wireless debugging (Android 11 or later). Paste the IP address and port from the main screen into the address field, or enter them separately. “Pair device with pairing code” shows the pairing port and code.</string>
+    <string name="adb_wifi_discovery_guide">On the target phone open Developer options → Wireless debugging → Pair with code. NekoFlash discovers the address and ports automatically.</string>
+    <string name="adb_wifi_discovery_searching">Looking for Wireless ADB devices on your Wi-Fi…</string>
+    <string name="adb_wifi_discovery_found">Detected Wireless ADB services</string>
+    <string name="adb_wifi_discovery_unavailable">Automatic discovery is unavailable. Check Wi-Fi/VPN or enter an address manually.</string>
+    <string name="adb_wifi_discovery_pair_device">Pairing · %1$s:%2$d</string>
+    <string name="adb_wifi_discovery_connect_device">Connection · %1$s:%2$d</string>
+    <string name="adb_wifi_discovery_wait_connect">Paired. Waiting for this device connection port…</string>
+    <string name="adb_wifi_manual_expand">Manual address (advanced)</string>
+    <string name="adb_wifi_discovery_rescan">Scan again</string>
     <string name="adb_wifi_host">IP address, hostname or IP:port</string>
     <string name="adb_wifi_connection_port">Connection port</string>
     <string name="adb_wifi_pairing_port">Pairing port</string>
@@ -57,7 +65,7 @@
     <string name="adb_wifi_connect">Connect</string>
     <string name="adb_wifi_disconnect">Disconnect Wi-Fi ADB</string>
     <string name="adb_wifi_pairing">Pairing…</string>
-    <string name="adb_wifi_paired">Paired. Use the address and port from the main Wireless debugging screen and tap Connect.</string>
+    <string name="adb_wifi_paired">Paired. Looking for the matching connection service…</string>
     <string name="adb_wifi_pair_failed">Pairing failed. Check the address, pairing port and active code, then try again.</string>
     <string name="adb_wifi_restart_transport">Restart NekoFlash to finish closing the previous transport before connecting.</string>
     <string name="adb_wifi_endpoint">ADB over Wi-Fi · %1$s</string>
@@ -544,7 +552,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="mass_flash_loading_images">Loading file names…</string>
     <string name="mass_flash_add_to_queue">Add to queue</string>
     <string name="mass_flash_slot_title">Slot for the queue</string>
-    <string name="mass_flash_slot_as_listed">As listed</string>
+    <string name="mass_flash_slot_as_listed">Current / exact</string>
     <string name="mass_flash_slot_value">Slot · %1$s</string>
     <string name="mass_flash_preview_button">Plan</string>
     <string name="mass_flash_preview_title">Flash plan</string>
