@@ -48,6 +48,7 @@ import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
+import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.os.LocaleListCompat
@@ -126,8 +127,12 @@ class MainActivity : AppCompatActivity() {
     private var operationHiddenProgressFingerprint: String? = null
     private var operationCancelRequested: Boolean = false
     private var terminalShowsLocalCommand = false
+    private var terminalWelcomePending = true
+    private var followConsoleAfterCommand = false
     private var localOverwriteDialog: androidx.appcompat.app.AlertDialog? = null
     private var displayedLocalOverwrite: DeviceViewModel.LocalOverwriteRequest? = null
+    private var localDeleteDialog: androidx.appcompat.app.AlertDialog? = null
+    private var displayedLocalDelete: DeviceViewModel.LocalDeleteRequest? = null
     // Keep completed checkpoint evidence, but do not resurrect its strip after
     // an Activity cold launch (including force-stop and process recreation).
     private var hideRestoredTerminalResultOnColdLaunch: Boolean = false
@@ -268,7 +273,7 @@ class MainActivity : AppCompatActivity() {
         consoleLogAdapter = ConsoleLogAdapter(terminalTextSizeSp)
         rvConsoleOutput.apply {
             layoutManager = LinearLayoutManager(this@MainActivity).apply {
-                stackFromEnd = true
+                stackFromEnd = false
             }
             adapter = consoleLogAdapter
             itemAnimator = null
@@ -280,10 +285,17 @@ class MainActivity : AppCompatActivity() {
         )
         consoleDockController = ConsoleDockController(
             this,
-            rvConsoleOutput,
-            onExpanded = { flushConsoleRender(pinToBottom = true) },
+            onExpanded = {
+                val showWelcome = terminalWelcomePending
+                terminalWelcomePending = false
+                flushConsoleRender(pinToBottom = !showWelcome, pinToTop = showWelcome)
+            },
         ).also { it.initialize() }
         findViewById<View>(R.id.btnConsoleLogs).setOnClickListener { showLogsMenu() }
+        findViewById<View>(R.id.btnTerminalZoomOut).setOnClickListener { changeTerminalTextSize(-1f) }
+        findViewById<View>(R.id.btnTerminalZoomIn).setOnClickListener { changeTerminalTextSize(1f) }
+        findViewById<View>(R.id.btnTerminalCopy).setOnClickListener { copyTerminalOutput() }
+        updateTerminalTextSizeLabel()
         findViewById<View>(R.id.btnConsoleClose).setOnClickListener { consoleDockController.collapse() }
         findViewById<View>(R.id.btnTerminalStop).setOnClickListener {
             if (terminalShowsLocalCommand) viewModel.cancelLocalTerminalCommand()
@@ -447,6 +459,7 @@ class MainActivity : AppCompatActivity() {
         viewModel.localTerminalRunning.observe(this) { renderTerminalOperationStatus() }
         viewModel.localTerminalCopyProgress.observe(this) { renderTerminalOperationStatus() }
         viewModel.localTerminalOverwrite.observe(this, ::renderLocalOverwrite)
+        viewModel.localTerminalDelete.observe(this, ::renderLocalDelete)
         viewModel.operationSteps.observe(this) { steps -> renderOperationSteps(steps) }
         viewModel.operationProgress.observe(this) { progress ->
             val operationIsActive = viewModel.operationActive.value == true
@@ -1037,6 +1050,7 @@ class MainActivity : AppCompatActivity() {
     private fun handleTerminalCommandInput() {
         val raw = etCommand.text.toString().trim()
         if (raw.isEmpty()) return
+        followConsoleAfterCommand = true
         // Terminal commands never inherit a pending GUI Operation Center
         // request (for example after a rejected GUI action with no USB).
         autoShowGuiOperation = false
@@ -1056,12 +1070,21 @@ class MainActivity : AppCompatActivity() {
             else -> currentTab to raw
         }
 
+        val localLine = extractLocalCommand(raw)
+        val trimmedRaw = raw.trimStart()
+        val explicitLocalPrefix = trimmedRaw == "local" ||
+            (trimmedRaw.startsWith("local") && trimmedRaw.getOrNull(5)?.isWhitespace() == true)
+        if (explicitLocalPrefix && localLine != null) {
+            runLocalTerminal(raw, localLine)
+            return
+        }
+
         if (viewModel.isInteractiveAdbShellActive()) {
             handleInteractiveAdbShellInput(raw, type, cmd)
             return
         }
 
-        extractLocalCommand(raw)?.let { localLine ->
+        if (type != "adb" && localLine != null) {
             runLocalTerminal(raw, localLine)
             return
         }
@@ -1147,18 +1170,31 @@ class MainActivity : AppCompatActivity() {
         }
         if (quickOutput != null) {
             viewModel.logLocalTerminal("${viewModel.localShell.prompt()} $raw")
+            if (quickOutput.clearTerminal) viewModel.clearTerminal()
             quickOutput.lines.forEach(viewModel::logLocalTerminal)
             return
         }
 
-        if (!PermissionGate.hasStorage(this)) {
-            viewModel.logLocalTerminal(getString(R.string.local_terminal_workspace_unavailable))
-            showPermissionsDialog()
+        val needsWorkspace = try {
+            viewModel.localShell.requiresWorkspace(command)
+        } catch (_: IllegalArgumentException) {
+            viewModel.logLocalTerminal(getString(R.string.local_terminal_invalid_syntax))
             return
         }
-        if (!::workspacePath.isInitialized || !workspacePath.isDirectory) initWorkspace()
-        if (!ensureWorkspaceReady()) return
-        when (viewModel.submitLocalTerminalCommand(raw, command, workspacePath)) {
+        val workspace = if (needsWorkspace) {
+            if (!PermissionGate.hasStorage(this)) {
+                viewModel.logLocalTerminal(getString(R.string.local_terminal_workspace_unavailable))
+                showPermissionsDialog()
+                return
+            }
+            if (!::workspacePath.isInitialized || !workspacePath.isDirectory) initWorkspace()
+            if (!ensureWorkspaceReady()) return
+            workspacePath
+        } else {
+            null
+        }
+
+        when (viewModel.submitLocalTerminalCommand(raw, command, workspace)) {
             DeviceViewModel.LocalTerminalAdmission.STARTED -> Unit
             DeviceViewModel.LocalTerminalAdmission.LOCAL_BUSY -> viewModel.logLocalTerminal(
                 getString(R.string.local_terminal_wait_local, getString(R.string.terminal_stop_button))
@@ -1187,6 +1223,26 @@ class MainActivity : AppCompatActivity() {
                 viewModel.answerLocalOverwrite(request, replace = false)
             }
             .setOnCancelListener { viewModel.answerLocalOverwrite(request, replace = false) }
+            .show()
+    }
+
+    private fun renderLocalDelete(request: DeviceViewModel.LocalDeleteRequest?) {
+        if (displayedLocalDelete === request) return
+        localDeleteDialog?.dismiss()
+        localDeleteDialog = null
+        displayedLocalDelete = request
+        if (request == null || isFinishing || isDestroyed) return
+
+        localDeleteDialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.terminal_delete_title)
+            .setMessage(getString(R.string.terminal_delete_message, request.file.name))
+            .setPositiveButton(R.string.delete_upper) { _, _ ->
+                viewModel.answerLocalDelete(request, delete = true)
+            }
+            .setNegativeButton(R.string.cancel_upper) { _, _ ->
+                viewModel.answerLocalDelete(request, delete = false)
+            }
+            .setOnCancelListener { viewModel.answerLocalDelete(request, delete = false) }
             .show()
     }
 
@@ -2725,17 +2781,7 @@ class MainActivity : AppCompatActivity() {
         actions += "${getString(R.string.logs_history)} (${entries.size})" to { showLogHistoryDialog() }
         actions += getString(R.string.logs_open_folder) to { openLogsFolder() }
         actions += getString(R.string.logs_clear_console) to { viewModel.clearTerminal() }
-        actions += getString(R.string.rev26_terminal_copy) to {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            clipboard.setPrimaryClip(android.content.ClipData.newPlainText("NekoFlash terminal", viewModel.terminalSnapshot().joinToString("\n")))
-            Toast.makeText(this, R.string.rev26_terminal_copied, Toast.LENGTH_SHORT).show()
-        }
-        if (consoleLogAdapter.textSizeSp < TERMINAL_TEXT_SIZE_MAX) {
-            actions += getString(R.string.terminal_text_size_increase) to { changeTerminalTextSize(1f) }
-        }
-        if (consoleLogAdapter.textSizeSp > TERMINAL_TEXT_SIZE_MIN) {
-            actions += getString(R.string.terminal_text_size_decrease) to { changeTerminalTextSize(-1f) }
-        }
+        actions += getString(R.string.rev26_terminal_copy) to { copyTerminalOutput() }
         if (oldCount > 0) {
             actions += "${getString(R.string.logs_delete_old)} ($oldCount)" to { confirmDeleteOldLogs() }
         }
@@ -2765,6 +2811,20 @@ class MainActivity : AppCompatActivity() {
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit {
             putFloat(PREF_TERMINAL_TEXT_SIZE_SP, size)
         }
+        updateTerminalTextSizeLabel()
+    }
+
+    private fun updateTerminalTextSizeLabel() {
+        findViewById<TextView>(R.id.tvTerminalTextSize)?.text =
+            getString(R.string.terminal_text_size_value, consoleLogAdapter.textSizeSp.toInt())
+    }
+
+    private fun copyTerminalOutput() {
+        val output = viewModel.terminalSnapshot().joinToString("\n")
+        if (output.isBlank()) return
+        val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+        clipboard.setPrimaryClip(ClipData.newPlainText("NekoFlash terminal", output))
+        Toast.makeText(this, R.string.rev26_terminal_copied, Toast.LENGTH_SHORT).show()
     }
 
     private fun showCurrentSessionSummaryDialog() {
@@ -5162,7 +5222,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun flushConsoleRender(pinToBottom: Boolean = false) {
+    private fun flushConsoleRender(pinToBottom: Boolean = false, pinToTop: Boolean = false) {
         if (consoleRenderScheduled) {
             consoleRenderHandler.removeCallbacks(flushConsoleRenderRunnable)
             consoleRenderScheduled = false
@@ -5172,18 +5232,20 @@ class MainActivity : AppCompatActivity() {
 
         // A user can reopen the panel before ViewModel's 75 ms publication;
         // query its live transcript in that case, never display stale output.
+        val followAfterCommand = !pinToTop && followConsoleAfterCommand
         val lines = CompactLogRenderPolicy.boundedSnapshot(
-            if (pinToBottom) viewModel.terminalSnapshot()
+            if (pinToBottom || pinToTop || followAfterCommand) viewModel.terminalSnapshot()
             else pendingConsoleSnapshot ?: return
         )
         pendingConsoleSnapshot = null
+        if (followAfterCommand) followConsoleAfterCommand = false
 
         val decision = CompactLogRenderPolicy.decide(lines, compactLogRenderState)
         compactLogRenderState = decision.nextState
 
         val layoutManager = rvConsoleOutput.layoutManager as? LinearLayoutManager
-        val keepPinnedToBottom = ConsoleAutoFollowPolicy.followOutput(
-            explicitlyRequested = pinToBottom,
+        val keepPinnedToBottom = !pinToTop && ConsoleAutoFollowPolicy.followOutput(
+            explicitlyRequested = pinToBottom || followAfterCommand,
             currentlyAtBottom = !rvConsoleOutput.canScrollVertically(1),
             selectingText = hasSelectedConsoleText(),
         )
@@ -5202,6 +5264,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         when {
+            pinToTop -> rvConsoleOutput.doOnNextLayout { view ->
+                if (!isFinishing && !isDestroyed && consoleDockController.isExpanded) {
+                    (view as? RecyclerView)?.let { output ->
+                        (output.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(0, 0)
+                    }
+                }
+            }
             keepPinnedToBottom -> scrollConsoleToBottom()
             decision.removeCount > 0 && firstVisiblePosition >= 0 -> {
                 layoutManager?.scrollToPositionWithOffset(

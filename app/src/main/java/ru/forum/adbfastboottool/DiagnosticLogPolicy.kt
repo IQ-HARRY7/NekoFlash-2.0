@@ -42,12 +42,12 @@ object DiagnosticLogPolicy {
             lower.contains("operation") || lower.contains("wake lock") -> Category.OPERATION
             lower.contains("file") || lower.contains("sha-256") || lower.contains("checksum") ||
                 lower.contains("folder") || lower.contains("report") || lower.contains("zip") -> Category.FILE
-            text.startsWith("===") || text.startsWith("[") -> Category.SYSTEM
+            text.startsWith("[") || lower.startsWith("=== flash queue ") -> Category.SYSTEM
             else -> Category.UNKNOWN
         }
 
         val significant = level != Level.INFO ||
-            text.startsWith("===") ||
+            category == Category.SYSTEM ||
             category in setOf(Category.DATA, Category.INVENTORY)
 
         return Classification(level, category, significant)

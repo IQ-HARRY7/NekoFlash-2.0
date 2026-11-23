@@ -56,6 +56,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     internal data class LocalCopyProgress(val copiedBytes: Long, val totalBytes: Long)
 
     internal class LocalOverwriteRequest(val file: File)
+    internal class LocalDeleteRequest(val file: File)
 
     sealed class OperationOutcome {
         object Success : OperationOutcome()
@@ -111,6 +112,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     internal val localTerminalCopyProgress: LiveData<LocalCopyProgress?> = _localTerminalCopyProgress
     private val _localTerminalOverwrite = MutableLiveData<LocalOverwriteRequest?>(null)
     internal val localTerminalOverwrite: LiveData<LocalOverwriteRequest?> = _localTerminalOverwrite
+    private val _localTerminalDelete = MutableLiveData<LocalDeleteRequest?>(null)
+    internal val localTerminalDelete: LiveData<LocalDeleteRequest?> = _localTerminalDelete
 
     internal fun importWorkspaceFile(uri: android.net.Uri, workspace: File): Boolean = synchronized(operationLaunchLock) {
         if (viewModelCleared.get() || localTerminalOperation != null) false else workspaceImport.start(uri, workspace)
@@ -281,7 +284,9 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private val _logLines = MutableLiveData(initialLines)
     val logLines: LiveData<List<String>> = _logLines
 
-    private val transcript = TerminalTranscript().apply { append(initialLines.first()) }
+    private val transcript = TerminalTranscript().apply {
+        TerminalWelcomeMessage.build(application).forEach(::append)
+    }
     private val _terminalLines = MutableLiveData(transcript.snapshot())
     internal val terminalLines: LiveData<List<String>> = _terminalLines
     private val terminalSubmission = ThreadLocal<Boolean>()
@@ -352,6 +357,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private val localTerminalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private data class LocalOverwriteConfirmation(val request: LocalOverwriteRequest, val answer: CompletableDeferred<Boolean>)
     private var localOverwriteConfirmation: LocalOverwriteConfirmation? = null
+    private data class LocalDeleteConfirmation(val request: LocalDeleteRequest, val answer: CompletableDeferred<Boolean>)
+    private var localDeleteConfirmation: LocalDeleteConfirmation? = null
     private val transportScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val mainHandler = Handler(Looper.getMainLooper())
     private val transportTransitionMutex = Mutex()
@@ -1236,7 +1243,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     internal fun logLocalTerminal(message: String) = log("> [Local] $message")
 
-    internal fun submitLocalTerminalCommand(raw: String, command: String, workspace: File): LocalTerminalAdmission =
+    internal fun submitLocalTerminalCommand(raw: String, command: String, workspace: File?): LocalTerminalAdmission =
         launchLocalTerminalCommand(localTerminalScope) { cancellation ->
             logLocalTerminal("${localShell.prompt()} $raw")
             val startedAt = SystemClock.elapsedRealtime()
@@ -1260,7 +1267,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                             lastProgressAt = now
                         }
                     },
-                    confirmOverwrite = ::requestLocalOverwrite
+                    confirmOverwrite = ::requestLocalOverwrite,
+                    confirmDelete = ::requestLocalDelete
                 )
                 when {
                     output == null -> logLocalTerminal(text(R.string.local_terminal_workspace_unavailable))
@@ -1301,6 +1309,31 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             localOverwriteConfirmation?.takeIf { it.request === request }
         }
         confirmation?.answer?.complete(replace)
+    }
+
+    private suspend fun requestLocalDelete(file: File): Boolean {
+        val confirmation = LocalDeleteConfirmation(LocalDeleteRequest(file), CompletableDeferred())
+        synchronized(operationLaunchLock) {
+            localDeleteConfirmation = confirmation
+            _localTerminalDelete.postValue(confirmation.request)
+        }
+        return try {
+            confirmation.answer.await()
+        } finally {
+            synchronized(operationLaunchLock) {
+                if (localDeleteConfirmation === confirmation) {
+                    localDeleteConfirmation = null
+                    _localTerminalDelete.postValue(null)
+                }
+            }
+        }
+    }
+
+    internal fun answerLocalDelete(request: LocalDeleteRequest, delete: Boolean) {
+        val confirmation = synchronized(operationLaunchLock) {
+            localDeleteConfirmation?.takeIf { it.request === request }
+        }
+        confirmation?.answer?.complete(delete)
     }
 
     internal fun launchLocalTerminalCommand(

@@ -46,8 +46,41 @@
     <string name="battery_optimization_already_disabled">✅ Battery optimization is already disabled for the app</string>
     <string name="battery_optimization_message">For long flashing, it is better to disable battery restrictions for this app. This lowers the risk that Android stops the process during file transfer.</string>
     <string name="battery_optimization_open_error">ERROR: could not open battery settings: %1$s</string>
-    <string name="system_terminal_ready">[System] Terminal ready…</string>
-    <string name="security_full_terminal_active">[Terminal] Direct ADB/Fastboot commands are available.</string>
+    <string name="terminal_welcome_title">Welcome to NekoFlash-2.0</string>
+    <string name="terminal_welcome_subtitle">LOCAL TERMINAL</string>
+    <string name="terminal_welcome_environment">ENVIRONMENT</string>
+    <string name="terminal_welcome_host_label">HOST</string>
+    <string name="terminal_welcome_host_value">Android %1$s · API %2$d</string>
+    <string name="terminal_welcome_abi_label">ABI</string>
+    <string name="terminal_welcome_workspace_label">WORKSPACE</string>
+    <string name="terminal_welcome_workspace_value">Download/NekoFlash (~)</string>
+    <string name="terminal_welcome_time_label">TIME</string>
+    <string name="terminal_welcome_date_label">DATE</string>
+    <string name="terminal_welcome_command_source">COMMAND SOURCE</string>
+    <string name="terminal_welcome_default_label">DEFAULT</string>
+    <string name="terminal_welcome_app_managed">App-managed commands</string>
+    <string name="terminal_welcome_device_label">DEVICE</string>
+    <string name="terminal_welcome_device_tools">Optional Android utilities</string>
+    <string name="terminal_welcome_enable_label">ENABLE DEVICE BINARIES</string>
+    <string name="terminal_welcome_restore_label">RESTORE APP COMMANDS</string>
+    <string name="terminal_welcome_fallback_label">FALLBACK</string>
+    <string name="terminal_welcome_fallback_value">App command if unavailable</string>
+    <string name="terminal_welcome_help">QUICK HELP</string>
+    <string name="terminal_welcome_help_hint">For more details, execute:</string>
+    <string name="terminal_welcome_transport">ADB / FASTBOOT keep existing routes</string>
+    <string name="terminal_welcome_access_label">ACCESS</string>
+    <string name="terminal_welcome_access_value">App permissions apply; no root</string>
+    <string name="system_terminal_ready">NekoFlash local terminal</string>
+    <string name="security_full_terminal_active">ADB and Fastboot commands continue through their existing handlers.</string>
+    <string name="terminal_zoom_out_symbol">−</string>
+    <string name="terminal_zoom_in_symbol">+</string>
+    <string name="terminal_text_size_value">%1$dsp</string>
+    <string name="terminal_text_label">TEXT</string>
+    <string name="terminal_zoom_in">Increase terminal text size</string>
+    <string name="terminal_zoom_out">Decrease terminal text size</string>
+    <string name="terminal_copy_short">COPY</string>
+    <string name="terminal_delete_title">Delete file?</string>
+    <string name="terminal_delete_message">Delete %1$s? This action cannot be undone.</string>
     <string name="log_cleared">[Log cleared]</string>
     <string name="connection_status_header">=== CONNECTION STATUS ===</string>
     <string name="state_label">State: %1$s</string>
@@ -170,23 +203,25 @@ Not requested:
     <string name="layout_operation_center_last_event">Latest log entry: %1$s</string>
     <string name="layout_operation_console">Open console</string>
     <string name="terminal_stop_button">Cancel</string>
-    <string name="terminal_text_size_increase">Increase terminal text size (+)</string>
-    <string name="terminal_text_size_decrease">Decrease terminal text size (−)</string>
     <string name="local_terminal_running">Running local command…</string>
     <string name="local_terminal_interactive_adb_hint">ADB Shell · input goes to the connected device</string>
     <string name="local_terminal_copy_progress">Copying %1$s of %2$s</string>
     <string name="local_terminal_invalid_syntax">Unclosed quote or trailing escape in local command.</string>
     <string-array name="local_terminal_help">
-        <item>Phone commands include echo, pwd, ls, cd, cat, grep, cp, mv, mkdir and clear.</item>
-        <item>~ points to Download/NekoFlash. Put paths with spaces in quotes.</item>
+        <item>Phone commands: echo, pwd, ls, cd, cat, grep, cp, mv, mkdir, rm and clear.</item>
+        <item>~ points to Download/NekoFlash. Quote paths that contain spaces.</item>
         <item>local ls</item>
         <item>local cd \"ROM files\"</item>
-        <item>local cat \"flash log.txt\"</item>
-        <item>local grep ERROR \"flash log.txt\"</item>
+        <item>local cat \"flash log.txt\" | grep ERROR</item>
+        <item>local echo first &amp;&amp; echo second</item>
         <item>local mkdir \"New images\"</item>
         <item>local cp \"boot image.img\" \"New images\"</item>
-        <item>local clear</item>
-        <item>cp and mv handle individual files and ask before replacing a file.</item>
+        <item>local rm \"old image.img\"</item>
+        <item>cp, mv and rm require confirmation. rm removes regular files only.</item>
+        <item>Logs and .nekoflash-* staging paths are protected from modification.</item>
+        <item>Optional read-only diagnostics: export NEKO_USE_DEVICE_BINARIES=1.</item>
+        <item>Allowed: getprop, id, uname, uptime, whoami, df, ps and date; reset with export NEKO_USE_DEVICE_BINARIES=0.</item>
+        <item>No shell interpreters, su, run-as, arbitrary executables, scripts or redirection.</item>
     </string-array>
     <string name="local_terminal_wait_local">A local command is running. Wait for it to finish or tap %1$s.</string>
     <string name="local_terminal_wait_usb">Wait for the USB operation to finish before running a local command.</string>

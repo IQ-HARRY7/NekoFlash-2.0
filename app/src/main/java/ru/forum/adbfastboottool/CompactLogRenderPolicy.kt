@@ -19,6 +19,13 @@ object CompactLogRenderPolicy {
         WARNING,
         SYSTEM,
         INFO,
+        LOCAL_OUTPUT,
+        TRANSPORT,
+        FASTBOOT,
+        FILE,
+        DATA,
+        OPERATION,
+        INVENTORY,
     }
 
     data class FormattedLine(
@@ -77,17 +84,38 @@ object CompactLogRenderPolicy {
     }
 
     fun format(line: String): FormattedLine {
-        val level = DiagnosticLogPolicy.classify(line).level
-        val tone = when {
+        val classification = DiagnosticLogPolicy.classify(line)
+        val localTone = line.takeIf { it.startsWith(LOCAL_PREFIX) }?.let {
+            when (it.removePrefix(LOCAL_PREFIX).firstOrNull()) {
+                '│' -> Tone.LOCAL_OUTPUT
+                '✓' -> Tone.SUCCESS
+                '!' -> Tone.WARNING
+                '✕' -> Tone.ERROR
+                '◇' -> Tone.SYSTEM
+                else -> Tone.COMMAND
+            }
+        }
+        val tone = localTone ?: when {
             line.startsWith("> ") -> Tone.COMMAND
             line.startsWith("💡") -> Tone.HINT
-            level == DiagnosticLogPolicy.Level.ERROR -> Tone.ERROR
-            level == DiagnosticLogPolicy.Level.WARNING -> Tone.WARNING
-            level == DiagnosticLogPolicy.Level.SUCCESS -> Tone.SUCCESS
-            else -> Tone.INFO
+            classification.level == DiagnosticLogPolicy.Level.ERROR -> Tone.ERROR
+            classification.level == DiagnosticLogPolicy.Level.WARNING -> Tone.WARNING
+            classification.level == DiagnosticLogPolicy.Level.SUCCESS -> Tone.SUCCESS
+            else -> when (classification.category) {
+                DiagnosticLogPolicy.Category.ADB, DiagnosticLogPolicy.Category.USB -> Tone.TRANSPORT
+                DiagnosticLogPolicy.Category.FASTBOOT -> Tone.FASTBOOT
+                DiagnosticLogPolicy.Category.FILE -> Tone.FILE
+                DiagnosticLogPolicy.Category.DATA -> Tone.DATA
+                DiagnosticLogPolicy.Category.OPERATION -> Tone.OPERATION
+                DiagnosticLogPolicy.Category.INVENTORY -> Tone.INVENTORY
+                DiagnosticLogPolicy.Category.SYSTEM -> Tone.SYSTEM
+                DiagnosticLogPolicy.Category.UNKNOWN -> Tone.INFO
+            }
         }
         return FormattedLine(line, tone)
     }
+
+    private const val LOCAL_PREFIX = "> [Local] "
 
     /**
      * Returns the longest suffix of [previous] equal to a prefix of [current].
