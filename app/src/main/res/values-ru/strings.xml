@@ -85,7 +85,6 @@
     <string name="terminal_shell_confirm_title">Запустить локальный shell-скрипт?</string>
     <string name="terminal_shell_confirm_message">Скрипт выполняется от UID приложения NekoFlash, не от root и не как настольный shell. Он может запускать доступные Android-команды и изменять файлы, доступные приложению. Fastboot shim передаёт поддерживаемые команды текущему USB-устройству. Запускайте только доверенные скрипты. PATH-заглушки блокируют обычные имена su/run-as; абсолютные пути могут обойти эту защиту. Android может запрещать запуск файлов непосредственно из общего хранилища, но sh script.sh может читать такой скрипт.</string>
     <string name="terminal_script_confirm_title">Подтвердите операцию Fastboot из скрипта</string>
-    <string name="terminal_script_confirm_message">Скрипт запросил опасную операцию Fastboot:
 
 %1$s
 
