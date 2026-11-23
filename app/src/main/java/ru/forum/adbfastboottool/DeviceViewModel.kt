@@ -1277,7 +1277,15 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     )
                     else -> output.lines.forEach(::logLocalTerminal)
                 }
-                if (output != null) logLocalTerminal(text(R.string.local_terminal_finished, elapsed()))
+                if (output != null) {
+                    when (output.exitCode) {
+                        0 -> logLocalTerminal("✓ ${text(R.string.local_terminal_finished, elapsed())}")
+                        130 -> logLocalTerminal("! ${text(R.string.local_terminal_cancelled, elapsed())}")
+                        else -> logLocalTerminal(
+                            "✕ ${text(R.string.local_terminal_failed, elapsed(), text(R.string.local_terminal_exit_code, output.exitCode))}"
+                        )
+                    }
+                }
             } catch (cancelled: CancellationException) {
                 logLocalTerminal(text(R.string.local_terminal_cancelled, elapsed()))
                 throw cancelled
