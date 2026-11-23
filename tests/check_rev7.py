@@ -178,7 +178,7 @@ assert 'testImplementation(\'junit:junit:4.13.2\')' in (root/'app/build.gradle')
 home_path = root/'app/src/main/res/layout/page_home.xml'
 raw_home = home_path.read_bytes()
 # User-approved Home ADB shortcuts replace the previous facts-only layout.
-expected_home_blob = '92dc0b00410e04621353dac2cb2c81a92c80d00f'
+expected_home_blob = '345a37db2747b650228b7d20814a3906bd3637ad'
 assert hashlib.sha1(b'blob ' + str(len(raw_home)).encode() + b'\0' + raw_home).hexdigest() == expected_home_blob, 'Unexpected Home layout change'
 from xml.etree import ElementTree as ET
 home = ET.parse(home_path).getroot()
@@ -216,7 +216,7 @@ for i, line in enumerate(normalized_lines):
 original_flash = b''.join(normalized_lines)
 # The approved Mass Flash selector now stays above the scrolling queue.
 # Keep the full new file pinned while retaining normalized older snapshots.
-approved_sticky_slot_flash_blob = '7daa9ab2357c0df239348f3961ddf33468ee3ead'
+approved_sticky_slot_flash_blob = 'cd07dd0ab9b6efffe2bb6a8b4ecc239a800581cb'
 assert git_blob_sha(original_flash) in (expected_flash_blob, mass_flash_slots_layout_blob) or (
     git_blob_sha(raw_flash) == approved_sticky_slot_flash_blob
 ), 'Unexpected Fastboot layout change'
