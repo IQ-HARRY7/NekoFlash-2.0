@@ -1,6 +1,6 @@
 # NekoFlash 2.0 — current status
 
-**Updated:** 22 November 2026
+**Updated:** 23 November 2026
 
 ## Signed release
 
@@ -15,7 +15,19 @@
 
 Public assets are the signed APK, its SHA-256 file and the required filesystem corresponding-source archive. Alpha11 through alpha14 remain available as historical signed releases.
 
-## Main and public website
+## Development snapshot
+
+The local terminal and its follow-up review are in `main` through PRs [#107](https://github.com/Ncorror/NekoFlash-2.0/pull/107), [#108](https://github.com/Ncorror/NekoFlash-2.0/pull/108), and [#110](https://github.com/Ncorror/NekoFlash-2.0/pull/110). [GitHub Actions passed on `a665837`](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45174261292).
+
+### Unreleased workflows in `a291271`
+
+- Mass Flash can select multiple Android files, map images to queue rows, and select a slot for the queue. The **Plan** action reads targets from the connected Fastboot session and shows the resulting order, repeated targets, and unresolved rows. Explicit partition names such as `boot_a` and `xbl_ab` stay literal. Quick Flash resolves the selected slot at execution and uses explicit slot suffixes as written.
+- The ADB device file browser lists remote folders, pulls files or folders into the workspace, and sends Android documents to the selected remote folder. Terminal Push and Pull accept multiple sources with a common destination.
+- ADB over Wi-Fi pairs with the target's Android 11+ Wireless debugging service. Pairing and connection use the ports shown on the target. When a device disconnects during an accepted reboot, the Wi-Fi connection ends and the operation records the accepted reboot.
+
+Local verification of `a291271` passed 536 JVM tests, built the Debug APK and the instrumentation APK, and completed Android Lint with zero errors and 14 warnings. The JVM suite includes a loopback fixture for ADB over TLS and cases for the resolved flash plan. Device and build coverage is recorded in [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
+
+## Public website
 
 PR #103 integrated donor-phone ADB stdout redirection by @IQ-HARRY7, preserving the original contributor commit. PR #104 included the feature in alpha15. A tester APK passed `>` and `>>`, large `logcat` captures and cancellation with partial output over USB OTG from POCO F7 to POCO X3 Pro.
 
@@ -46,6 +58,8 @@ This change first shipped in Alpha14. It passed on POCO F5 in the signed Alpha15
 
 ## Hardware disposition
 
+These field results apply to the builds and devices documented in [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
+
 | Area | Result |
 | --- | --- |
 | vayu `fastboot format userdata` | FIELD PASS; Android subsequently booted |
@@ -59,15 +73,14 @@ This change first shipped in Alpha14. It passed on POCO F5 in the signed Alpha15
 | Quick Flash Recovery on POCO F5 (`marble`) | FIELD PASS for two `flash:recovery` writes and `reboot-recovery`. With “All slots” selected, the bootloader returned `FAILGetVar Variable Not found` for `has-slot:recovery` and the app used `flash:recovery`. A/B recovery writes remain unverified. |
 | Terminal rotation/input/header | FIELD PASS for the reproduced regression scenario |
 
-Detailed history: [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
-
 ## Known limitations
 
 - Hardware qualification applies only to tested device/firmware combinations.
 - POCO F7/onyx can intermittently fail long inbound USB transfers as host. Power/VBUS sensitivity is plausible but not proven because voltage/current were not instrumented.
 - Raw diagnostics are intentionally complete and may contain sensitive identifiers/paths.
 - Xiaomi WebView authentication cookies persist until explicit Logout; this is intentional session behavior and must be considered on shared host phones.
-- GitHub repository rulesets were empty when read during this audit. The protected release environment is proven by the real approval-gated release, but main branch protection could not be read through the connected GitHub App. See [REPOSITORY_SECURITY.md](REPOSITORY_SECURITY.md).
+
+See [REPOSITORY_SECURITY.md](REPOSITORY_SECURITY.md) for release approval and GitHub settings evidence.
 
 ## Next development rule
 

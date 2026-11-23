@@ -9,6 +9,12 @@
 - Repository rulesets API returned **no rulesets** (`[]`) during this audit.
 - Branch-protection details could not be read by the connected GitHub App (403: integration permission), so this repository must **not** claim branch protection was independently verified by the audit.
 
+## Current workflows and release
+
+- [Build Android APK](../.github/workflows/build.yml) runs on pushes to `main`, pull requests targeting `main`, and manual dispatch. A manual dispatch with `sign_release` on `main` can produce a signed Actions artifact in `nekoflash-release`.
+- [Publish NekoFlash Release](../.github/workflows/release.yml) runs on a `v*` tag push or a `main` push that changes `.github/RELEASE_REQUEST`. The release-request path creates the version tag after exact-SHA main CI passes. The workflow verifies the same CI result before signing and publication.
+- On 23 November 2026, GitHub reported [v6.0.0-alpha15](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha15) as the latest normal release. Its tag points to `ce33b0aba8d1810ef8cbc227e1cb106f2e146f5a`. The public rulesets endpoint returned an empty list and the branch-protection endpoint returned HTTP 403.
+
 ## Source-enforced release gates
 
 The workflow requires:

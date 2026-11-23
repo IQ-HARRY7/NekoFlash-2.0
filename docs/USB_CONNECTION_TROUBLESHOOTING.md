@@ -22,9 +22,9 @@ Do not repeatedly resend a destructive command merely because the device disappe
 
 ## POCO F7 / onyx
 
-POCO F7/onyx has historical and current evidence of intermittent long inbound USB failures when used as host. The same vayu target and files passed on a POCO X3 Pro host.
+The recorded POCO F7/onyx host tests found intermittent long inbound USB failures. The same vayu target and files passed on a POCO X3 Pro host. [Hardware results](HARDWARE_VALIDATION.md#final-72-adb-pull-disposition)
 
-For a large Pull:
+For a large Pull that established a checkpoint:
 - if transport fails, NekoFlash stops fail-closed;
 - reconnect manually;
 - run the same Pull again;
@@ -43,4 +43,4 @@ Recovery ADB/Sideload is a different mode from normal Android ADB. A disconnect 
 
 ## Evidence
 
-When a new failure is reproducible, export a fresh NekoFlash diagnostics ZIP and keep the original raw evidence private. Do not replace a current failure report with an old REV checklist.
+When a new failure is reproducible, export a fresh NekoFlash diagnostics ZIP and keep the original raw evidence private. Consult the [hardware results](HARDWARE_VALIDATION.md) for the tested device pairs and builds, and the [current status](STATUS.md) for the app's latest development changes.

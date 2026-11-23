@@ -13,15 +13,19 @@ NekoFlash is a professional device-service tool. Security policy must not silent
 
 ## ADB host identity
 
-The ADB private key is stored in the application-private directory. New private-key publication uses same-directory staging, owner-only permissions, fsync and atomic rename. A corrupt existing identity is preserved rather than silently rotated.
+USB ADB and Wireless debugging use separate RSA host identities in application-private directories. New private-key publication uses same-directory staging, owner-only permissions, fsync and atomic rename. A corrupt existing identity is preserved rather than silently rotated.
 
 The public `adbkey.pub` is derived from the private identity and is not secret.
 
+## Wireless debugging
+
+The development source can pair with the Android 11+ target at the operator-specified address using its Wireless debugging code. The connection port negotiates ADB's TLS upgrade before commands and file transfers. The daemon authenticates the paired host RSA public key. The saved dialog draft contains the address and ports.
+
 ## Diagnostic privacy
 
-Raw logs can contain commands, serials, paths, USB metadata and operation context. Do not publish them blindly.
+Raw logs can contain commands, serials, paths, USB metadata, Wireless debugging endpoints and operation context. Do not publish them blindly.
 
-The shareable sanitizer covers structured serial/account/device fields, sensitive properties and explicit ADB/Fastboot `-s SERIAL` selectors in current `main`. The published alpha11 APK predates the post-release selector-specific hardening, so alpha11 users should still manually review sanitized material before publication.
+The shareable sanitizer covers structured serial/account/device fields, sensitive properties and explicit ADB/Fastboot `-s SERIAL` selectors. The historical signed alpha11 APK predates the selector-specific hardening, so alpha11 users should still manually review sanitized material before publication.
 
 ## Xiaomi session
 

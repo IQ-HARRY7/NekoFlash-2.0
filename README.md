@@ -44,6 +44,13 @@ Host root is not required. Target operations depend on the device mode, bootload
 
 **Xiaomi unlock status:** On 22 November 2026, the signed Alpha15 build successfully unlocked a POCO F5 (`marble`) over USB OTG. Fastboot confirmed `unlocked=yes` on a subsequent connection. [Current unlock guide](https://nekoflash.ncorror.chatgpt.site/guides/xiaomi-unlock-without-pc/).
 
+## In development
+
+- **ADB over Wi-Fi.** On an Android 11+ target, open **Developer options → Wireless debugging**. In NekoFlash, open **ADB → ADB over Wi-Fi**, enter the target address, pairing port and six-digit code from the target's pairing dialog, then tap **Pair**. To connect, use the address and connection port from the main **Wireless debugging** screen. Paste `IP:port` or fill in the address and port separately. [Android wireless debugging guide](https://developer.android.com/tools/adb#connect-to-a-device-over-wi-fi).
+- **ADB transfers.** Terminal `adb push` and `adb pull` accept multiple sources followed by an existing destination directory. Under **ADB → Device files**, browse from `/sdcard`, tap a file or choose **Pull folder** to save it to `Download/NekoFlash` on the host, or use **Send here** to select files with the Android picker. The browser and terminal work over the active USB or Wi-Fi ADB connection.
+- **Mass Flash.** Choose **Android files · multiple images** and assign a partition to each image. Set the queue to **As listed**, **A**, **B** or **All slots**. The slot choice uses the target's per-partition layout, and explicit names such as `boot_b` are sent as listed. With Fastboot connected, **Plan** shows resolved targets and repeated writes in queue order. The **Operation Center** distinguishes written, failed and skipped targets. For longer queues, **All steps** opens the full list.
+- **Quick Flash.** NekoFlash reads the target's active slot at execution time for the current and other slot choices. Explicit target names such as `boot_a` are used as entered.
+
 ## See the interface
 
 <p align="center">
@@ -89,7 +96,7 @@ The alpha15 release commit passed 471 JVM tests and 58 installed-app tests (29 e
 - **X3 Pro host → X3 Pro target:** repeated 128 MiB Pull/Push with matching SHA-256 — FIELD PASS.
 - **Recovery/Sideload, Mass Flash, ADB/Fastboot transitions and terminal rotation/input:** accepted field evidence on the documented rigs.
 - **POCO F7 / onyx as host:** intermittent long inbound USB transfer failures remain documented; resumable Pull preserves completed checkpoints.
-- **POCO F5 / marble:** Xiaomi Unlock and Quick Flash to `recovery` — FIELD PASS on Alpha15. Separate writes to both Recovery slots remain unverified.
+- **POCO F5 / marble:** Xiaomi Unlock and Quick Flash to `recovery` — FIELD PASS on Alpha15. The flash log shows `flash:recovery`, and the bootloader returned `Variable Not found` for `has-slot:recovery`. [Field test record](docs/testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-RU.md).
 
 [Current status](docs/STATUS.md) · [Hardware validation](docs/HARDWARE_VALIDATION.md) · [USB troubleshooting](docs/USB_CONNECTION_TROUBLESHOOTING.md)
 
