@@ -42,12 +42,12 @@ def run():
     # REV55: approved safety improvement adds an explicit START button;
     # selection must not directly mutate the target.
     button_ids = [el.attrib.get(AND + 'id') for el in buttons]
-    for value in ['btnAdbSideload', 'btnClearSideloadSelection', 'btnStartAdbSideload', 'btnSideloadImport']:
+    for value in ['btnAdbSideload', 'btnClearSideloadSelection', 'btnStartAdbSideload']:
         require(button_ids.count('@+id/' + value) == 1, 'Sideload MaterialButton missing or duplicated: ' + value)
     clear_button = next(el for el in buttons if el.attrib.get(AND + 'id') == '@+id/btnClearSideloadSelection')
     require(clear_button.attrib.get(AND + 'visibility') == 'gone',
             'Clear button must be hidden until a ZIP is selected')
-    for value in ['containerAdb', 'btnAdbSideload', 'btnClearSideloadSelection', 'btnStartAdbSideload', 'btnSideloadImport', 'tvSideloadSelectedZip']:
+    for value in ['containerAdb', 'btnAdbSideload', 'btnClearSideloadSelection', 'btnStartAdbSideload', 'tvSideloadSelectedZip']:
         require(ids.count('@+id/' + value) == 1, 'Required UI ID not unique: ' + value)
     for res in ['values', 'values-ru']:
         strings = ET.parse(base / ('res/' + res + '/strings.xml')).getroot()
@@ -74,14 +74,22 @@ def run():
     require('startSelectedSideloadWithConfirmation()' in main and
             'R.id.btnStartAdbSideload' in main,
             'Separate explicit and confirmed Sideload launch is disconnected')
-    require('R.id.btnSideloadImport).setOnClickListener { startImportFilePicker() }' in main,
-            'Explicit import fallback disappeared')
-    require('R.id.btnSideloadImport).setOnClickListener { startImportFilePicker() }' in main, 'Import behavior changed')
+    require('R.id.btnSideloadImport' not in main, 'Sideload must not expose the legacy Import action')
+    require('R.id.btnBlockImportFastboot).setOnClickListener { startImportFilePicker() }' in main,
+            'Workspace import must remain available from the Flash tab')
+    for unrelated in ['btnSideloadImport', 'btnAdbWifi', 'btnAdbDeviceFiles', 'layout_sideload_verdict_note']:
+        require(not any(unrelated in node.attrib.values() for node in page.iter()),
+                'Unrelated UI still visible on Sideload: ' + unrelated)
+    home = ET.parse(base / 'res/layout/page_home.xml').getroot()
+    home_ids = [node.attrib.get(AND + 'id') for node in home.iter()]
+    for action in ['btnAdbWifi', 'btnAdbDeviceFiles']:
+        require(home_ids.count('@+id/' + action) == 1, 'Home ADB action missing: ' + action)
+        require('R.id.' + action + ').setOnClickListener' in main, 'Home ADB action not wired: ' + action)
     nav = (base / 'res/layout/activity_main.xml').read_text(encoding='utf-8')
     for tab in ['tabHome','tabFastboot','tabAdb','tabUnlock','tabSettings']:
         require(nav.count('android:id="@+id/' + tab + '"') == 1, 'Missing fifth-tab shell ID: ' + tab)
     require('Sideload' in (base/'res/values-ru/strings.xml').read_text(encoding='utf-8'), 'Sideload tab label missing')
-    print(f'PASS: {len(xmls)} XML resources parsed; Sideload 4-button explicit Choose/Clear/Start/Import safety contract; RU/EN; original transport hashes; 5 tabs')
+    print(f'PASS: {len(xmls)} XML resources parsed; Sideload 3-button Choose/Clear/Start contract, Home ADB tools, Flash import fallback; RU/EN; original transport hashes; 5 tabs')
 
 if __name__ == '__main__':
     run()
