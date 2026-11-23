@@ -21,6 +21,15 @@ The local terminal and its review are in `main` through PRs [#107](https://githu
 
 PR [#111](https://github.com/Ncorror/NekoFlash-2.0/pull/111) added the ADB Wi-Fi, device-file browser and multi-image Mass Flash changes to `main` at `2c919c3`. Follow-up PR [#112](https://github.com/Ncorror/NekoFlash-2.0/pull/112) fixed stale async directory results in the device-file browser and added a Robolectric regression for API 26/34; it was merged to `main` at `677d45e`. [PR #112 GitHub Actions run 861](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45256287638) passed build, installed mkfs API 26/34 and verified tester-APK packaging. This is **automated verification**, not physical-device qualification of the new workflows. The signed public release remains Alpha15.
 
+### Wireless ADB discovery — 24 November 2026 (experimental, pending CI and device test)
+
+- Add foreground-only discovery of Android 11+ Wireless debugging endpoints using Android NSD (`_adb-tls-pairing._tcp.` and `_adb-tls-connect._tcp.`). This does **not** replace the existing tested TLS pairing client or ADB socket transport.
+- A shorter dialog shows detected IP/port endpoints, asks for the six-digit pairing code and selects the matching connection endpoint by the GUID returned from pairing. It never silently connects to an unrelated discovered device; users can still select a connection manually.
+- The former manual IP/connection/pairing port fields remain available in a collapsible advanced section for restricted networks, VPN/multicast issues and older targets. Discovery stops and releases its multicast lock when the dialog closes.
+- Mass Flash's default null slot override now reads **Current** (EN **Current / exact**), retaining the existing exact partition identifiers and avoiding any forced slot switch; explicit A/B/all overrides remain unchanged.
+- Source references reviewed: Shizuku `AdbMdns.kt` (NSD callbacks), Android ADB Wi-Fi architecture documentation. No upstream code copied wholesale.
+- Test coverage: unit checks for GUID-to-mDNS endpoint selection. Automated Android build/lint/instrumentation and real host/target Wi-Fi tests must pass before merging or publishing.
+
 ### UI review — 23–24 November 2026 (merged, not yet in the signed release)
 
 PR [#113](https://github.com/Ncorror/NekoFlash-2.0/pull/113) was merged at `c9e4c04`. [GitHub Actions #875](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45278414841): **PASS** (538/538 JVM tests; Android Lint zero warnings/errors; Android API 26/34 installed-app tests; verified tester APK packaging). The Android instrumentation includes large-font portrait/landscape screen coverage. Real phone tests of these new workflows remain pending.
