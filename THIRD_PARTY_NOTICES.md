@@ -54,7 +54,7 @@ Upstream license references:
 - Material Components: https://github.com/material-components/material-components-android/blob/master/LICENSE
 - Kotlin: https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt
 - kotlinx.coroutines: https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt
-- adb-kt: https://github.com/rhythmcache/adb-kt/blob/1.0.13/LICENSE
+- adb-kt: https://github.com/rhythmcache/adb-kt/blob/v1.0.13/LICENSE
 - spake2-kt: https://github.com/rhythmcache/spake2-kt/blob/v1.0.2/LICENSE
 - Bouncy Castle: https://www.bouncycastle.org/licence.html
 - Okio: https://github.com/square/okio/blob/master/LICENSE.txt
