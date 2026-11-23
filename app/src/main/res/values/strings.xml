@@ -292,6 +292,8 @@ Not requested:
     <string name="settings_telegram">Telegram</string>
     <string name="settings_telegram_sub">NekoFlash tester group</string>
     <string name="settings_link_open_error">Could not open link: %1$s</string>
+    <string name="settings_import_workspace">Import file to workspace</string>
+    <string name="settings_import_workspace_sub">Copy a document into Download/NekoFlash</string>
     <string name="settings_clear_workspace">🗑 Clear workspace folder</string>
     <string name="settings_clear_workspace_sub">Delete imported files from the working folder</string>
     <string name="settings_clear_workspace_confirm">Delete all files in:
@@ -627,7 +629,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev12_sideload_cancelled">ADB Sideload cancelled.</string>
     <string name="rev12_sideload_mode_inactive">ADB Sideload is not active. Device mode: %1$s.</string>
     <string name="rev12_sideload_failed">ADB Sideload error (%1$s): %2$s.</string>
-    <string name="rev12_sideload_saf_unsupported">The document cannot be read directly. Use Import file on the Flash tab to copy it into Download/NekoFlash, then select the copied ZIP for Sideload.</string>
+    <string name="rev12_sideload_saf_unsupported">The document cannot be read directly. Use Settings → Import file to workspace, then select the copied ZIP for Sideload.</string>
     <string name="rev13_fastboot_slot_error">Cannot resolve the Fastboot slot for partition %1$s.</string>
     <string name="rev13_direct_saf_failed">Cannot flash the selected document directly. The provider may not support random access or Native USBFS may be unavailable. Choose an image from the NekoFlash workspace instead.</string>
     <string name="rev13_picker_no_document">Android did not return a selected image.</string>
