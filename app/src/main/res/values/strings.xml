@@ -65,7 +65,7 @@
     <string name="adb_wifi_connect">Connect</string>
     <string name="adb_wifi_disconnect">Disconnect Wi-Fi ADB</string>
     <string name="adb_wifi_pairing">Pairing…</string>
-    <string name="adb_wifi_paired">Paired. Use the address and port from the main Wireless debugging screen and tap Connect.</string>
+    <string name="adb_wifi_paired">Paired. Looking for the matching connection service…</string>
     <string name="adb_wifi_pair_failed">Pairing failed. Check the address, pairing port and active code, then try again.</string>
     <string name="adb_wifi_restart_transport">Restart NekoFlash to finish closing the previous transport before connecting.</string>
     <string name="adb_wifi_endpoint">ADB over Wi-Fi · %1$s</string>
