@@ -21,6 +21,8 @@ assert 'local help' in welcome
 assert 'local ls' not in welcome and 'local cat' not in welcome and 'local grep' not in welcome
 assert 'TerminalWelcomeMessage.isWelcomeLine(item.text)' in adapter
 assert 'textSizeSp)' in adapter
+assert 'var textSizeSp = initialTextSizeSp' in adapter
+assert 'fun setTextSizeSp(' not in adapter, 'Kotlin property setter already generates setTextSizeSp(Float)'
 assert 'TerminalWelcomeMessage.TEXT_SIZE_SP else textSizeSp' in adapter
 assert 'textView.setSingleLine(isWelcome)' in adapter
 assert 'TextUtils.TruncateAt.END' in adapter
