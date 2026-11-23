@@ -17,15 +17,17 @@ Public assets are the signed APK, its SHA-256 file and the required filesystem c
 
 ## Development snapshot
 
-The local terminal and its follow-up review are in `main` through PRs [#107](https://github.com/Ncorror/NekoFlash-2.0/pull/107), [#108](https://github.com/Ncorror/NekoFlash-2.0/pull/108), and [#110](https://github.com/Ncorror/NekoFlash-2.0/pull/110). [GitHub Actions passed on `a665837`](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45174261292).
+The local terminal and its review are in `main` through PRs [#107](https://github.com/Ncorror/NekoFlash-2.0/pull/107), [#108](https://github.com/Ncorror/NekoFlash-2.0/pull/108) and [#110](https://github.com/Ncorror/NekoFlash-2.0/pull/110). [GitHub Actions passed on `a665837`](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45174261292).
 
-### Unreleased workflows in `a291271`
+PR [#111](https://github.com/Ncorror/NekoFlash-2.0/pull/111) added the ADB Wi-Fi, device-file browser and multi-image Mass Flash changes to `main` at `2c919c3`. Follow-up PR [#112](https://github.com/Ncorror/NekoFlash-2.0/pull/112) fixed stale async directory results in the device-file browser and added a Robolectric regression for API 26/34; it was merged to `main` at `677d45e`. [PR #112 GitHub Actions run 861](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45256287638) passed build, installed mkfs API 26/34 and verified tester-APK packaging. This is **automated verification**, not physical-device qualification of the new workflows. The signed public release remains Alpha15.
+
+### Unreleased workflows added in PR #111
 
 - Mass Flash can select multiple Android files, map images to queue rows, and select a slot for the queue. The **Plan** action reads targets from the connected Fastboot session and shows the resulting order, repeated targets, and unresolved rows. Explicit partition names such as `boot_a` and `xbl_ab` stay literal. Quick Flash resolves the selected slot at execution and uses explicit slot suffixes as written.
 - The ADB device file browser lists remote folders, pulls files or folders into the workspace, and sends Android documents to the selected remote folder. Terminal Push and Pull accept multiple sources with a common destination.
 - ADB over Wi-Fi pairs with the target's Android 11+ Wireless debugging service. Pairing and connection use the ports shown on the target. When a device disconnects during an accepted reboot, the Wi-Fi connection ends and the operation records the accepted reboot.
 
-Local verification of `a291271` passed 536 JVM tests, built the Debug APK and the instrumentation APK, and completed Android Lint with zero errors and 14 warnings. The JVM suite includes a loopback fixture for ADB over TLS and cases for the resolved flash plan. Device and build coverage is recorded in [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
+Earlier local verification of `a291271` passed 536 JVM tests, built the Debug APK and the instrumentation APK, and completed Android Lint with zero errors and 14 warnings. The JVM suite includes a loopback fixture for ADB over TLS and cases for the resolved flash plan. The merged PR #111 includes later lint fixes. The verified PR #112 tester kit is available as an Actions artifact; real-device qualification of Wireless debugging pairing/connect/reconnect, file-browser Push/Pull, and Mass Flash's target preview/non-destructive plan is **pending**. Device and build coverage is recorded in [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
 
 ## Public website
 
