@@ -34,6 +34,7 @@
     <string name="delete_upper">УДАЛИТЬ</string>
     <string name="cancel_upper">ОТМЕНА</string>
     <string name="close_upper">ЗАКРЫТЬ</string>
+    <string name="home_adb_actions_title">ADB · Подключение и файлы</string>
     <string name="adb_device_files">Файлы устройства</string>
     <string name="adb_device_files_location">Файлы устройства · %1$s</string>
     <string name="adb_device_files_up">Вверх</string>
@@ -630,7 +631,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev12_sideload_cancelled">ADB Sideload отменён.</string>
     <string name="rev12_sideload_mode_inactive">ADB Sideload не активен. Режим устройства: %1$s.</string>
     <string name="rev12_sideload_failed">Ошибка ADB Sideload (%1$s): %2$s.</string>
-    <string name="rev12_sideload_saf_unsupported">Не удалось прочитать документ напрямую или провайдер не поддерживает произвольный доступ. Используй «Импорт», чтобы скопировать ZIP в прежнюю рабочую папку.</string>
+    <string name="rev12_sideload_saf_unsupported">Документ нельзя прочитать напрямую. На вкладке «Прошить» импортируйте его в Download/NekoFlash, затем выберите скопированный ZIP для Sideload.</string>
     <string name="rev13_fastboot_slot_error">Не удалось определить слот Fastboot для раздела %1$s.</string>
     <string name="rev13_direct_saf_failed">Нельзя прошить выбранный документ напрямую. Провайдер может не поддерживать произвольное чтение или недоступен Native USBFS. Выбери образ из рабочей папки NekoFlash.</string>
     <string name="rev13_picker_no_document">Android не вернул выбранный образ.</string>
