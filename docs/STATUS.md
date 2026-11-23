@@ -23,7 +23,7 @@ PR [#111](https://github.com/Ncorror/NekoFlash-2.0/pull/111) added the ADB Wi-Fi
 
 ### UI review — 23 November 2026 (not yet released)
 
-- Mass Flash slot selection is a full-width highlighted action fixed above the scrolling image queue, instead of a narrow control beside the destructive Execute button.
+- Mass Flash slot selection is a full-width highlighted action fixed above the scrolling image queue in portrait. In short landscape viewports, the same highlighted selector shares the fixed bottom action row with Execute so the RecyclerView has room for its editable form. This preserves the selected slot and keeps both actions accessible.
 - Wireless ADB pairing/connection and remote Device files were moved from the Sideload page to Home. The existing handlers, connection checks, and file transfers are unchanged.
 - Sideload now only displays Recovery mode guidance, the selected ZIP with Clear, Choose ZIP and Start Sideload. The repeated result disclaimer and redundant Import button were removed from this page.
 - Workspace Import remains directly reachable under Settings → Service, as a fallback for file providers that cannot supply a seekable ZIP; the older Fastboot-only import button is in an inactive legacy card. Actual device transfer and installation status still depend on Recovery evidence.
