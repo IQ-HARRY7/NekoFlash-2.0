@@ -80,9 +80,6 @@ internal class ConsoleLogAdapter(initialTextSizeSp: Float) : RecyclerView.Adapte
         notifyItemRangeInserted(start, lines.size)
     }
 
-    fun setTextSizeSp(value: Float) {
-        textSizeSp = value.coerceIn(9f, 20f)
-    }
 
     private fun newItem(rawLine: String): Item {
         val formatted = CompactLogRenderPolicy.format(rawLine)
