@@ -8,7 +8,6 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
-import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 
 /**
@@ -20,7 +19,6 @@ import com.google.android.material.bottomsheet.BottomSheetBehavior
  */
 internal class ConsoleDockController(
     private val activity: AppCompatActivity,
-    private val consoleOutput: RecyclerView,
     private val onExpanded: () -> Unit = {},
 ) {
     private val root: View by lazy { activity.findViewById(R.id.rootCoordinator) }
@@ -205,7 +203,6 @@ internal class ConsoleDockController(
             // Catch the RecyclerView up only when the user opens the terminal.
             // Offscreen bursts must not keep reformatting and notifying rows.
             onExpanded()
-            scrollOutputToBottom()
             focusPendingCommandInput()
         }
     }
@@ -247,12 +244,6 @@ internal class ConsoleDockController(
         params.height = targetHeight
         params.weight = 0f
         body.layoutParams = params
-    }
-
-    private fun scrollOutputToBottom() {
-        val lastPosition = (consoleOutput.adapter?.itemCount ?: 0) - 1
-        if (lastPosition < 0) return
-        consoleOutput.post { consoleOutput.scrollToPosition(lastPosition) }
     }
 
     private fun focusPendingCommandInput() {

@@ -19,7 +19,11 @@ expected_blob = 'b80db90bf4aa40edaa29d0dd6a70a698c5a06d45'
 def git_blob_sha(data):
     return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
 
+# The source file is pinned as a complete Git blob. A reviewed terminal
+# extension is accepted below only with explicit admission, cancellation,
+# workspace isolation, and confirmation invariants asserted.
 vm_blob = git_blob_sha(raw_vm)
+
 
 # REV31 allows ONE exact raw-shell evidence directory argument in the ADB
 # constructor. Rebuild the old blob in memory; unrelated orchestration edits
@@ -52,8 +56,19 @@ retained_local_terminal_vm_blob = '5115ac3dbe1ea7c40a7122de33d921df10bcf082'
 adb_workflows_vm_blob = '9a8a81aa6b4aaf9cd106f752195fd591455439c4'
 # Queue slot selection and ordered physical flash targets.
 mass_flash_slots_vm_blob = 'dbdd17dcec9508eb3831e0608d5fb8901f1c3699'
-shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, adb_workflows_vm_blob, mass_flash_slots_vm_blob)
-adb_operation_count = 8 if vm_blob in (adb_workflows_vm_blob, mass_flash_slots_vm_blob) else 7
+# EXEC-TEST welcome banner plus ViewModel-owned, confirmation-gated rm support.
+merged_local_terminal_vm_blob = 'dfe58474085a5cb4678b56176d5b734007967f07'
+# PR #108 review: propagate nonzero exit status without claiming false success.
+reviewed_terminal_exit_vm_blob = 'f763572f3a83f76f26a13d9194d699fcaea0ad47'
+# Combined Mass Flash and ADB workflows with the terminal changes on main.
+integrated_workflows_vm_blob = 'c308da05c4846f6f308d6035e656fa9af726186e'
+mass_flash_slots_vm_blobs = (mass_flash_slots_vm_blob, integrated_workflows_vm_blob)
+terminal_exit_vm_blobs = (reviewed_terminal_exit_vm_blob, integrated_workflows_vm_blob)
+shell_redirect_vm_blobs = (
+    rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob,
+    adb_workflows_vm_blob, mass_flash_slots_vm_blob, merged_local_terminal_vm_blob, *terminal_exit_vm_blobs,
+)
+adb_operation_count = 8 if vm_blob in (adb_workflows_vm_blob, *mass_flash_slots_vm_blobs) else 7
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
@@ -99,6 +114,22 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert vm.count('AdbProtocol.ShellRedirect') == 1
         assert vm.count('redirect = redirect') == 1
         assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
+    if vm_blob in (merged_local_terminal_vm_blob, *terminal_exit_vm_blobs):
+        assert 'internal val localShell = LocalShell { StatFs(it.absolutePath).availableBytes }' in vm
+        assert 'TerminalWelcomeMessage.build(application).forEach(::append)' in vm
+        assert 'private val localTerminalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)' in vm
+        assert 'private suspend fun requestLocalDelete(file: File): Boolean' in vm
+        assert 'confirmDelete = ::requestLocalDelete' in vm
+        local_admission = vm.split('internal fun launchLocalTerminalCommand(')[1].split('internal fun cancelLocalTerminalCommand()')[0]
+        assert 'localTerminalOperation != null' in local_admission
+        assert 'hasUnfinishedUsbOperation()' in local_admission
+        assert 'workspaceImport.isBusy' in local_admission
+        assert 'internal fun answerLocalDelete(request: LocalDeleteRequest, delete: Boolean)' in vm
+        if vm_blob in terminal_exit_vm_blobs:
+            assert 'when (output.exitCode)' in vm
+            assert '0 -> logLocalTerminal("✓ ' in vm
+            assert '130 -> logLocalTerminal("! ' in vm
+            assert 'R.string.local_terminal_exit_code' in vm
 elif vm_blob != expected_blob:
     reviewed_change = (
         b'                keyDirectory = adbKeyDir,\n'
@@ -122,7 +153,7 @@ elif vm_blob != expected_blob:
         'DeviceViewModel changed outside the reviewed REV31 evidence path'
     )
 assert 'queue.sortedBy' not in vm and 'ordered.forEachIndexed' in vm
-if vm_blob == mass_flash_slots_vm_blob:
+if vm_blob in mass_flash_slots_vm_blobs:
     assert 'val ordered = items.filter' in vm and 'ordered.flatMapIndexed' in vm
     assert 'resolved.forEachIndexed' in vm and 'publishQueueSteps(resolved)' in vm
     assert 'resolveTargets(item.partition, slot, proto::resolveSlotPartitionTargets)' in vm

@@ -68,7 +68,7 @@ class DiagnosticEvidenceArchiveTest {
                 listOf("logs/trace-$index.bin", "reports/usb-sessions/usb-session-$index.json",
                     "reports/usb-sessions/usb-session-$index.txt").map { relative ->
                     workspace.resolve(relative).apply {
-                        parentFile.mkdirs()
+                        checkNotNull(parentFile).mkdirs()
                         writeBytes(byteArrayOf(0, 127, -1, index.toByte()))
                     }
                 }

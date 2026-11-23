@@ -42,6 +42,7 @@ class LocalShellTest {
         assertEquals(listOf("hello world"), shell.quickOutput("echo \"hello world\"", help)?.lines)
         assertNull(shell.quickOutput("mkdir \"новая папка\"", help))
         assertNull(shell.quickOutput("cat \"flash log.txt\"", help))
+        assertTrue(runCatching { shell.quickOutput("echo safe > file.txt", help) }.exceptionOrNull() is IllegalArgumentException)
     }
 
     @Test fun quotedPathsCdPwdAndTildeStayInWorkspace() = withWorkspace { root ->
@@ -116,13 +117,141 @@ class LocalShellTest {
         assertEquals("~", shell.prompt())
     }
 
-    @Test fun terminalRequiresExplicitLocalPrefix() {
+
+    @Test fun catAndPipelinesPassOutputBetweenCommands() = withWorkspace { root ->
+        File(root, "flash.log").writeText("INFO start\nERROR boot failed\nINFO done\n")
+        val shell = newShell()
+        val workspace: suspend () -> File? = { root }
+
+        val piped = shell.execute("local cat flash.log | grep ERROR", workspace) { false }
+        assertEquals(listOf("ERROR boot failed"), piped?.lines)
+
+        val chained = shell.execute("local echo first && echo second", workspace) { false }
+        assertEquals(listOf("first", "second"), chained?.lines)
+
+        val skipped = shell.execute("local grep MISSING flash.log && echo should-not-run", workspace) { false }
+        assertEquals(listOf("🔎 No matches"), skipped?.lines)
+
+        val completedPipeline = shell.execute("local grep MISSING flash.log | cat && echo continued", workspace) { false }
+        assertEquals(listOf("continued"), completedPipeline?.lines)
+        val redirection = runCatching { shell.execute("echo unsafe > flash.log", workspace) { false } }.exceptionOrNull()
+        assertTrue(redirection is IllegalArgumentException)
+    }
+
+    @Test fun clearAndDeviceBinaryPreferenceAreSessionScoped() = runBlocking {
+        val shell = newShell()
+        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
+
+        val enabled = shell.execute("export NEKO_USE_DEVICE_BINARIES=1", noWorkspace) { false }
+        assertTrue(enabled?.deviceBinariesEnabled == true)
+        assertTrue(enabled?.lines?.single()?.contains("enabled") == true)
+
+        val clear = shell.execute("clear", noWorkspace) { false }
+        assertTrue(clear?.clearTerminal == true)
+        assertTrue(clear?.deviceBinariesEnabled == true)
+
+        val disabled = shell.execute("export NEKO_USE_DEVICE_BINARIES=0", noWorkspace) { false }
+        assertFalse(disabled?.deviceBinariesEnabled == true)
+    }
+
+    @Test fun removeRequiresConfirmationAndCannotDeleteDirectories() = withWorkspace { root ->
+        val file = File(root, "old.img").apply { writeText("data") }
+        val directory = File(root, "folder").apply { mkdir() }
+        val shell = newShell()
+        val workspace: suspend () -> File? = { root }
+
+        val cancelled = shell.execute(
+            "local rm old.img", workspace,
+            confirmDelete = { false }, confirmOverwrite = { error("Unexpected overwrite confirmation") },
+        )
+        assertTrue(file.exists())
+        assertTrue(cancelled?.lines?.single()?.contains("Cancelled") == true)
+
+        val removed = shell.execute(
+            "local rm old.img", workspace,
+            confirmDelete = { true }, confirmOverwrite = { error("Unexpected overwrite confirmation") },
+        )
+        assertFalse(file.exists())
+        assertTrue(removed?.lines?.single()?.contains("Removed") == true)
+
+        val error = runCatching {
+            shell.execute(
+                "local rm folder", workspace,
+                confirmDelete = { true }, confirmOverwrite = { error("Unexpected overwrite confirmation") },
+            )
+        }.exceptionOrNull()
+        assertTrue(error is IllegalArgumentException)
+        assertTrue(directory.exists())
+    }
+
+    @Test fun operatorsInsideQuotesAreNotParsedAsShellOperators() = runBlocking {
+        val shell = newShell()
+        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
+        val output = shell.execute("echo \"a && b | c\"", noWorkspace) { false }
+        assertEquals(listOf("a && b | c"), output?.lines)
+    }
+
+    @Test fun terminalRecognizesOnlyLocalPrefixAndBareEcho() {
         assertEquals("ls \"ROM files\"", extractLocalCommand("local ls \"ROM files\""))
         assertEquals("echo hello", extractLocalCommand("local echo hello"))
         assertEquals("", extractLocalCommand("local"))
         assertNull(extractLocalCommand("echo hello > output.txt"))
         assertNull(extractLocalCommand("fastboot reboot"))
         assertNull(extractLocalCommand("adb shell ls"))
+        assertEquals("clear", extractLocalCommand("clear"))
+        assertEquals("export NEKO_USE_DEVICE_BINARIES=1", extractLocalCommand("export NEKO_USE_DEVICE_BINARIES=1"))
+    }
+
+
+    @Test fun shellInterpretersRemainUnavailableEvenWithDeviceBinariesEnabled() = runBlocking {
+        val shell = newShell()
+        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
+        shell.execute("export NEKO_USE_DEVICE_BINARIES=1", noWorkspace) { false }
+        val result = shell.execute("local sh -c echo", noWorkspace) { false }
+        assertTrue(result?.lines?.single()?.contains("blocked") == true)
+    }
+
+    @Test fun privilegeEscalationAndArbitraryBinariesStayBlocked() = runBlocking {
+        val shell = newShell()
+        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
+        shell.execute("export NEKO_USE_DEVICE_BINARIES=1", noWorkspace) { false }
+        for (command in listOf("sh", "bash", "toybox", "busybox", "su", "run-as")) {
+            val result = shell.execute("local $command", noWorkspace) { false }
+            assertTrue("$command must be blocked", result?.lines?.single()?.contains("blocked") == true)
+        }
+        val arbitrary = shell.execute("local chmod", noWorkspace) { false }
+        assertTrue(arbitrary?.lines?.single()?.contains("not allowed") == true)
+        val optionLikeProperty = runCatching { shell.execute("local getprop --", noWorkspace) { false } }.exceptionOrNull()
+        assertTrue(optionLikeProperty is IllegalArgumentException)
+    }
+
+    @Test fun nonZeroExitAndUserCancellationArePreserved() = withWorkspace { root ->
+        File(root, "readme.txt").writeText("hello\\n")
+        val shell = newShell()
+        val noMatches = requireNotNull(shell.execute("grep MISSING readme.txt", { root }) { false })
+        assertEquals(1, noMatches.exitCode)
+        val unknown = requireNotNull(shell.execute("unknown-tool", { root }) { false })
+        assertEquals(127, unknown.exitCode)
+        val declined = requireNotNull(shell.execute(
+            "rm readme.txt", { root },
+            confirmDelete = { false }, confirmOverwrite = { false },
+        ))
+        assertEquals(130, declined.exitCode)
+        assertTrue(File(root, "readme.txt").exists())
+        val success = requireNotNull(shell.execute("echo success", { root }) { false })
+        assertEquals(0, success.exitCode)
+    }
+
+    @Test fun rmRefusesSymlinkInsteadOfDeletingItsTarget() = withWorkspace { root ->
+        val target = File(root, "important.txt").apply { writeText("keep") }
+        Files.createSymbolicLink(File(root, "alias.txt").toPath(), target.toPath())
+        val shell = newShell()
+        val failure = runCatching {
+            shell.execute("rm alias.txt", { root }, confirmDelete = { true }, confirmOverwrite = { false })
+        }.exceptionOrNull()
+        assertTrue(failure is IllegalArgumentException)
+        assertEquals("keep", target.readText())
+        assertTrue(File(root, "alias.txt").exists())
     }
 
     @Test fun localTokenizerErrorsDoNotMentionFastboot() = runBlocking {
