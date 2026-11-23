@@ -34,6 +34,8 @@ android {
     testOptions {
         unitTests.includeAndroidResources = true
         unitTests.all {
+            systemProperty 'robolectric.dependency.repo.url', 'https://maven-central.storage-download.googleapis.com/maven2/'
+            systemProperty 'robolectric.dependency.repo.id', 'google-maven-central'
             jvmArgs += [
                 '--add-opens=java.base/java.lang=ALL-UNNAMED',
                 '--add-opens=java.base/java.util=ALL-UNNAMED',
