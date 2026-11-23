@@ -1084,8 +1084,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        localLine?.let { command ->
-            runLocalTerminal(raw, command)
+        if (type != "adb" && localLine != null) {
+            runLocalTerminal(raw, localLine)
             return
         }
 
