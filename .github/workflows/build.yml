@@ -66,6 +66,7 @@ jobs:
       - name: REV27 structural and source-guard tests
         run: |
           python3 tests/check_rev27.py
+          python3 tests/check_terminal_welcome.py
           python3 tests/check_i18n.py
           python3 tests/check_docs.py
           python3 tests/check_tester_kit.py
