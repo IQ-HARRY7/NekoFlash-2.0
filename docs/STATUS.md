@@ -21,14 +21,16 @@ The local terminal and its review are in `main` through PRs [#107](https://githu
 
 PR [#111](https://github.com/Ncorror/NekoFlash-2.0/pull/111) added the ADB Wi-Fi, device-file browser and multi-image Mass Flash changes to `main` at `2c919c3`. Follow-up PR [#112](https://github.com/Ncorror/NekoFlash-2.0/pull/112) fixed stale async directory results in the device-file browser and added a Robolectric regression for API 26/34; it was merged to `main` at `677d45e`. [PR #112 GitHub Actions run 861](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45256287638) passed build, installed mkfs API 26/34 and verified tester-APK packaging. This is **automated verification**, not physical-device qualification of the new workflows. The signed public release remains Alpha15.
 
-### Wireless ADB discovery — 24 November 2026 (experimental, pending CI and device test)
+### Wireless ADB discovery — 24 November 2026 (merged, hardware verification pending)
+
+PR [#114](https://github.com/Ncorror/NekoFlash-2.0/pull/114) merged at `b0c7d2a`. [GitHub Actions #881](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45289128881) **PASS**: 540/540 JVM tests, zero Android Lint issues, API 26 + API 34 installed-app tests, and verified tester APK packaging. The Robolectric runtime dependency is pinned to the canonical Maven Central host after a prior HTTP 429 on repo1.maven.org. This is not a physical-device pairing/connect PASS; the signed public Alpha15 remains unchanged.
 
 - Add foreground-only discovery of Android 11+ Wireless debugging endpoints using Android NSD (`_adb-tls-pairing._tcp.` and `_adb-tls-connect._tcp.`). This does **not** replace the existing tested TLS pairing client or ADB socket transport.
 - A shorter dialog shows detected IP/port endpoints, asks for the six-digit pairing code and selects the matching connection endpoint by the GUID returned from pairing. It never silently connects to an unrelated discovered device; users can still select a connection manually.
 - The former manual IP/connection/pairing port fields remain available in a collapsible advanced section for restricted networks, VPN/multicast issues and older targets. Discovery stops and releases its multicast lock when the dialog closes.
 - Mass Flash's default null slot override now reads **Current** (EN **Current / exact**), retaining the existing exact partition identifiers and avoiding any forced slot switch; explicit A/B/all overrides remain unchanged.
 - Source references reviewed: Shizuku `AdbMdns.kt` (NSD callbacks), Android ADB Wi-Fi architecture documentation. No upstream code copied wholesale.
-- Test coverage: unit checks for GUID-to-mDNS endpoint selection. Automated Android build/lint/instrumentation and real host/target Wi-Fi tests must pass before merging or publishing.
+- Test coverage: GUID-to-mDNS endpoint-selection unit tests and Android build/lint/instrumentation are green. Real host/target Wi-Fi pairing, reconnect, VPN/mDNS fallback and small-screen UI remain to be validated before the next signed release.
 
 ### UI review — 23–24 November 2026 (merged, not yet in the signed release)
 
