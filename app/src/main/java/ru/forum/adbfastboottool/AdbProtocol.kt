@@ -3,6 +3,8 @@ package ru.forum.adbfastboottool
 import android.hardware.usb.*
 import android.annotation.SuppressLint
 import java.io.File
+import java.io.IOException
+import java.io.InputStream
 import java.io.RandomAccessFile
 import java.util.ArrayDeque
 import java.util.concurrent.CancellationException
@@ -13,38 +15,62 @@ import java.util.concurrent.atomic.AtomicLong
 private const val EXPECTED_REBOOT_DISCONNECT_WINDOW_NS = 15_000_000_000L
 
 /**
- * USB Host реализация ADB protocol для одной физической transport-сессии.
+ * ADB protocol для одной USB Host или Wireless debugging transport-сессии.
  *
  * Класс владеет ADB authentication, single-reader dispatcher, shell/sync и sideload.
- * Экземпляр одноразовый: после transport failure или [close] его нельзя переиспользовать.
- * Команды отправляются напрямую transport-слою; USB disconnect считается успешным только
+ * Экземпляр одноразовый: после transport failure или [disconnect] его нельзя переиспользовать.
+ * Команды отправляются напрямую transport-слою; disconnect считается успешным только
  * для протокольно односторонних сервисов (например reboot), где это явно ожидается.
  */
-class AdbProtocol(
-    private val usbManager: UsbManager,
-    private val device: UsbDevice,
-    private val keyDirectory: File,
+class AdbProtocol private constructor(
+    private val usbManager: UsbManager?,
+    private val device: UsbDevice?,
+    private val adbKeyStore: AdbKeyStore,
     private val onLog: (String) -> Unit,
-    private val onProgress: (Int, String) -> Unit = { _, _ -> },
-    private val preferredInterfaceIndex: Int? = null,
-    private val rawShellLogsDir: File = File(keyDirectory.parentFile ?: keyDirectory, "diagnostics/adb-shell")
+    private val onProgress: (Int, String) -> Unit,
+    private val preferredInterfaceIndex: Int?,
+    private val rawShellLogsDir: File,
+    private val wirelessTransport: AdbWirelessTransport?
 ) {
+    constructor(
+        usbManager: UsbManager,
+        device: UsbDevice,
+        keyDirectory: File,
+        onLog: (String) -> Unit,
+        onProgress: (Int, String) -> Unit = { _, _ -> },
+        preferredInterfaceIndex: Int? = null,
+        rawShellLogsDir: File = File(keyDirectory.parentFile ?: keyDirectory, "diagnostics/adb-shell")
+    ) : this(
+        usbManager, device, AdbKeyStore(keyDirectory, onLog), onLog,
+        onProgress, preferredInterfaceIndex, rawShellLogsDir, null
+    )
+
+    constructor(
+        keyStore: AdbKeyStore,
+        host: String,
+        port: Int,
+        onLog: (String) -> Unit,
+        onProgress: (Int, String) -> Unit = { _, _ -> },
+        rawShellLogsDir: File
+    ) : this(null, null, keyStore, onLog, onProgress, null, rawShellLogsDir, AdbWirelessTransport(host, port))
+
     // This is a *target-device* ADB shell path, not an Android host path.
     // Environment.getExternalStorageDirectory() would refer to the wrong phone.
     @SuppressLint("SdCardPath")
     private fun remoteObbDirectory(packageName: String): String =
         "/sdcard/Android/obb/$packageName"
 
-    private val LOCAL_ADB_VERSION = AdbPacketChecksum.VERSION_WITH_CHECKSUM
+    private val LOCAL_ADB_VERSION = if (wirelessTransport == null) AdbPacketChecksum.VERSION_WITH_CHECKSUM
+        else AdbPacketChecksum.VERSION_SKIP_CHECKSUM
 
     private var connection: UsbDeviceConnection? = null
     private var endpointIn: UsbEndpoint? = null
     private var endpointOut: UsbEndpoint? = null
     private var adbInterface: UsbInterface? = null
+    @Volatile private var wirelessReady = false
 
     @Volatile private var cancelled = false
     private var nextLocalId = 2
-    private val adbKeyStore by lazy { AdbKeyStore(keyDirectory, onLog) }
     private val deviceFeatures = linkedSetOf<String>()
     private var remoteBanner: String = ""
     private var peerProtocolVersion: Int = LOCAL_ADB_VERSION
@@ -62,20 +88,22 @@ class AdbProtocol(
     @Volatile private var directReadFailureCode: AdbPacketDispatcher.FailureCode? = null
     @Volatile private var directReadFailureMessage: String? = null
     var onTransportFailure: ((AdbPacketDispatcher.FailureCode, String) -> Unit)? = null
+    internal var onExpectedRebootDisconnect: (() -> Unit)? = null
+    private var captureReadDeadlineNs: Long? = null
 
-    // ADB reboot is a one-way service: the device may leave the USB bus before
-    // sending A_OKAY/A_CLSE. These fields let the single-reader dispatcher and
-    // the command coroutine agree that this specific disconnect is expected.
-    @Volatile private var expectedDisconnectService: String? = null
-    @Volatile private var expectedDisconnectOpenWritten: Boolean = false
-    @Volatile private var expectedDisconnectObserved: Boolean = false
-    @Volatile private var expectedDisconnectExpiresAtNs: Long = 0L
+    // ADB reboot is a one-way service: the device may disconnect before
+    // sending A_OKAY/A_CLSE or just after acknowledging the service.
+    private val rebootOpenLock = Any()
+    private var expectedRebootDisconnectUntilNs: Long? = null
 
     private val interactiveShellLock = Any()
     private var interactiveShellSession: InteractiveShellSession? = null
 
     val isConnected: Boolean
-        get() = !dispatcherTransportFailed && connection != null && endpointIn != null && endpointOut != null && adbInterface != null
+        get() = !dispatcherTransportFailed && (wirelessReady ||
+            (connection != null && endpointIn != null && endpointOut != null && adbInterface != null))
+
+    val isWireless: Boolean get() = wirelessTransport != null
 
     private val A_CNXN = 0x4E584E43L
     private val A_OPEN = 0x4E45504FL
@@ -83,6 +111,8 @@ class AdbProtocol(
     private val A_CLSE = 0x45534C43L
     private val A_WRTE = 0x45545257L
     private val A_AUTH = 0x48545541L
+    private val A_STLS = 0x534C5453L
+    private val A_STLS_VERSION = 0x01000000
 
     private val AUTH_TOKEN        = 1
     private val AUTH_SIGNATURE    = 2
@@ -96,6 +126,7 @@ class AdbProtocol(
     private val SYNC_MODE_IFMT = 61440       // 0170000
     private val SYNC_MODE_IFDIR = 16384      // 0040000
     private val SYNC_MODE_IFREG = 32768      // 0100000
+    private val SYNC_MODE_IFLNK = 40960      // 0120000
 
     private val SHELL_ID_STDIN = 0
     private val SHELL_ID_STDOUT = 1
@@ -200,7 +231,10 @@ class AdbProtocol(
         peerProtocolVersion = LOCAL_ADB_VERSION
         clearPendingInboundPayload()
 
-        val iface = findAdbInterface() ?: run {
+        wirelessTransport?.let { return connectWireless(it) }
+        val usbManager = requireNotNull(usbManager)
+        val device = requireNotNull(device)
+        val iface = findAdbInterface(device) ?: run {
             onLog("ERROR: ADB interface not found")
             return false
         }
@@ -278,7 +312,30 @@ class AdbProtocol(
         }
     }
 
-    private fun findAdbInterface(): UsbInterface? {
+    private fun connectWireless(transport: AdbWirelessTransport): Boolean = try {
+        transport.connect()
+        sendMessageInternal(A_CNXN, LOCAL_ADB_VERSION, MAX_PAYLOAD, "host::NekoFlash\u0000".toByteArray(Charsets.UTF_8))
+        val stls = readHeaderDirect()
+        if (stls?.command != A_STLS || stls.arg0 != A_STLS_VERSION || stls.dataLength != 0) {
+            throw IOException("Expected Wireless debugging TLS upgrade on the connection port")
+        }
+        sendMessageInternal(A_STLS, A_STLS_VERSION, 0, EMPTY_PAYLOAD)
+        transport.upgradeToTls(adbKeyStore)
+        val banner = readHeaderDirect()
+        if (banner?.command != A_CNXN) throw IOException("No ADB connection confirmation after TLS")
+        handleConnectionBanner(banner)
+        transport.finishHandshake()
+        wirelessReady = true
+        onLog("=== ADB WIRELESS CONNECTION ESTABLISHED ===")
+        startPacketDispatcher()
+        true
+    } catch (error: Exception) {
+        onLog("ERROR: ADB Wireless debugging connection failed: ${error.message ?: error.javaClass.simpleName}")
+        disconnect()
+        false
+    }
+
+    private fun findAdbInterface(device: UsbDevice): UsbInterface? {
         preferredInterfaceIndex?.let { index ->
             if (index in 0 until device.interfaceCount) {
                 val iface = device.getInterface(index)
@@ -417,6 +474,7 @@ class AdbProtocol(
         peerProtocolVersion = header.arg0
         peerMaxPayloadSize = AdbInteractiveInputChunkPolicy.maxWirePayload(header.arg1, MAX_PAYLOAD)
         val bannerBytes = readData(header.dataLength)
+        if (isWireless && bannerBytes == null) throw IOException("Invalid ADB connection banner after TLS")
         remoteBanner = bannerBytes?.toString(Charsets.UTF_8)?.trimEnd('\u0000').orEmpty()
         parseRemoteFeatures(remoteBanner)
         if (remoteBanner.isNotBlank()) onLog("ADB banner: $remoteBanner")
@@ -698,10 +756,39 @@ class AdbProtocol(
 
     // ─── ADB SYNC / FILE TRANSFER ────────────────────────────────────────────
 
-    fun pushPath(localPath: File, remotePath: String, mode: Int = 0x1A4): Boolean {
-        if (!isConnected) return false
-        cancelled = false
+    fun pushPath(localPath: File, remotePath: String, mode: Int = 0x1A4): Boolean =
+        pushPaths(listOf(localPath), remotePath, mode)
 
+    internal fun pushPaths(
+        localPaths: List<File>, remotePath: String, mode: Int = 0x1A4,
+        checkCancelled: () -> Unit = {}
+    ): Boolean {
+        if (!isConnected || localPaths.isEmpty()) return false
+        cancelled = false
+        checkCancelled()
+        if (localPaths.size == 1) return pushPathInOperation(localPaths.single(), remotePath, mode)
+
+        if (!isValidRemotePath(remotePath)) {
+            onLog("❌ adb push: invalid remote path")
+            return false
+        }
+        val directory = remotePath.trimEnd('/') + "/"
+        // Legacy SYNC STAT uses lstat. A trailing slash resolves directory links such as /sdcard.
+        val destinationStat = statRemotePath(directory, logMissing = false)
+        checkCancelled()
+        if (cancelled || !isConnected) return false
+        if (destinationStat?.isDirectory != true) {
+            onLog("❌ adb push: destination must be a directory for multiple sources: $remotePath")
+            return false
+        }
+        return transferBatch(localPaths, "push", checkCancelled) { path ->
+            val target = if (path.isDirectory) directory else joinRemotePath(directory, path.name)
+            pushPathInOperation(path, target, mode)
+        }
+    }
+
+    private fun pushPathInOperation(localPath: File, remotePath: String, mode: Int): Boolean {
+        if (cancelled || !isConnected) return false
         return when {
             localPath.exists() && localPath.isFile && localPath.canRead() ->
                 pushFileInternal(localPath, remotePath, mode, startNewOperation = false)
@@ -715,6 +802,21 @@ class AdbProtocol(
 
     fun pushFile(localFile: File, remotePath: String, mode: Int = 0x1A4): Boolean =
         pushFileInternal(localFile, remotePath, mode, startNewOperation = true)
+
+    internal data class PushSource(
+        val name: String,
+        val size: Long?,
+        val modifiedSeconds: Int,
+        val openInput: () -> InputStream
+    )
+
+    internal fun pushDocuments(sources: List<PushSource>, remoteDirectory: String, checkCancelled: () -> Unit): Boolean {
+        if (!isConnected || sources.isEmpty()) return false
+        cancelled = false
+        return transferBatch(sources, "push", checkCancelled) { source ->
+            writePushSource(source, joinRemotePath(remoteDirectory, source.name), mode = 0x1A4)
+        }
+    }
 
     /**
      * Recursive push is one operation. Its nested file sends must never
@@ -730,52 +832,68 @@ class AdbProtocol(
             onLog("❌ adb push: local file is unavailable: ${localFile.absolutePath}")
             return false
         }
-        val cleanRemote = remotePath
-        if (!isValidRemotePath(cleanRemote)) {
+        return writePushSource(
+            PushSource(localFile.name, localFile.length(), (localFile.lastModified() / 1000L).toInt()) {
+                localFile.inputStream()
+            },
+            remotePath,
+            mode
+        )
+    }
+
+    private fun writePushSource(source: PushSource, remotePath: String, mode: Int): Boolean {
+        if (!isValidRemotePath(remotePath)) {
             onLog("❌ adb push: invalid remote path")
             return false
         }
 
-        onLog("-> adb push ${localFile.name} $cleanRemote")
-        onLog("Size: ${localFile.length()} bytes")
+        onLog("-> adb push ${source.name} $remotePath")
+        source.size?.let { onLog("Size: $it bytes") }
 
-        val stream = openAdbStream("sync:") ?: return false
+        var stream: AdbStream? = null
         try {
-            val spec = "$cleanRemote,$mode".toByteArray(Charsets.UTF_8)
-            if (!writeSyncRequest(stream, "SEND", spec)) return false
-
-            val total = localFile.length().coerceAtLeast(1L)
             var sentBytes = 0L
-            var lastProgress = -1
-            RandomAccessFile(localFile, "r").use { raf ->
+            val sync = source.openInput().use { input ->
+                if (cancelled || !isConnected) return false
+                val sync = openAdbStream("sync:") ?: return false
+                stream = sync
+                val spec = "$remotePath,$mode".toByteArray(Charsets.UTF_8)
+                if (!writeSyncRequest(sync, "SEND", spec)) return false
+
+                var lastProgress = -1
                 val buffer = ByteArray(SYNC_DATA_CHUNK)
                 while (!cancelled) {
-                    val read = raf.read(buffer)
-                    if (read <= 0) break
-                    if (!writeSyncData(stream, "DATA", buffer, read)) return false
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    if (read == 0) continue
+                    if (!writeSyncData(sync, "DATA", buffer, read)) return false
                     sentBytes += read.toLong()
-                    val progress = ((sentBytes * 100L) / total).toInt()
-                    if (progress >= 100 || progress / 10 != lastProgress / 10) {
-                        onLog("adb push: $progress% ($sentBytes/${localFile.length()} bytes)")
-                        lastProgress = progress
+                    source.size?.takeIf { it > 0 }?.let { total ->
+                        val progress = ((sentBytes * 100L) / total).toInt()
+                        if (progress >= 100 || progress / 10 != lastProgress / 10) {
+                            onLog("adb push: $progress% ($sentBytes/$total bytes)")
+                            lastProgress = progress
+                        }
                     }
                 }
+                sync
             }
             if (cancelled) {
                 onLog("⚠️ adb push cancelled")
                 return false
             }
 
-            val mtime = (localFile.lastModified() / 1000L).toInt()
-            if (!writeSyncIdAndInt(stream, "DONE", mtime)) return false
-            val ok = readSyncStatus(stream, "adb push")
-            if (ok) onLog("✅ adb push completed: $cleanRemote")
+            if (!writeSyncIdAndInt(sync, "DONE", source.modifiedSeconds)) return false
+            val ok = readSyncStatus(sync, "adb push")
+            if (ok) onLog("✅ adb push completed: $remotePath ($sentBytes bytes)")
             return ok
+        } catch (error: CancellationException) {
+            throw error
         } catch (e: Exception) {
             onLog("❌ adb push error: ${e.message ?: e.javaClass.simpleName}")
             return false
         } finally {
-            closeAdbStream(stream)
+            stream?.let(::closeAdbStream)
         }
     }
 
@@ -852,10 +970,45 @@ class AdbProtocol(
         }
     }
 
-    fun pullFile(remotePath: String, localFile: File): Boolean {
-        if (!isConnected) return false
-        cancelled = false
+    fun pullFile(remotePath: String, localFile: File): Boolean = pullFiles(listOf(remotePath), localFile)
 
+    internal fun pullFiles(remotePaths: List<String>, localFile: File, checkCancelled: () -> Unit = {}): Boolean {
+        if (!isConnected || remotePaths.isEmpty()) return false
+        cancelled = false
+        checkCancelled()
+        if (remotePaths.size == 1) return pullFileInOperation(remotePaths.single(), localFile)
+
+        if (!localFile.isDirectory) {
+            onLog("❌ adb pull: destination must be a directory for multiple sources: ${localFile.absolutePath}")
+            return false
+        }
+        return transferBatch(remotePaths, "pull", checkCancelled) { path ->
+            val name = path.trimEnd('/').substringAfterLast('/')
+            // A remote root, current directory or parent directory has no child name to append.
+            val target = if (name.isEmpty() || name == "." || name == "..") localFile else File(localFile, name)
+            pullFileInOperation(path, target)
+        }
+    }
+
+    private fun <T> transferBatch(
+        sources: List<T>, operation: String, checkCancelled: () -> Unit, transfer: (T) -> Boolean
+    ): Boolean {
+        var completed = 0
+        try {
+            for ((index, source) in sources.withIndex()) {
+                checkCancelled()
+                if (cancelled || !isConnected) break
+                onLog("ℹ️ adb $operation: source ${index + 1}/${sources.size}")
+                if (transfer(source)) completed++
+            }
+            return completed == sources.size
+        } finally {
+            onLog("ℹ️ adb $operation: $completed/${sources.size} sources transferred")
+        }
+    }
+
+    private fun pullFileInOperation(remotePath: String, localFile: File): Boolean {
+        if (cancelled || !isConnected) return false
         val cleanRemote = remotePath
         if (!isValidRemotePath(cleanRemote)) {
             onLog("❌ adb pull: invalid remote path")
@@ -863,15 +1016,21 @@ class AdbProtocol(
         }
 
         val stat = statRemotePath(cleanRemote)
+        if (cancelled || !isConnected) return false
         if (stat == null || !stat.exists) {
             onLog("❌ adb pull: remote path not found or unavailable: $cleanRemote")
             return false
         }
 
+        val isLink = (stat.mode and SYNC_MODE_IFMT) == SYNC_MODE_IFLNK
+        if (isLink && statRemotePath("${cleanRemote.trimEnd('/')}/", logMissing = false)?.isDirectory == true) {
+            return pullDirectory(cleanRemote, localFile)
+        }
         return if (stat.isDirectory) {
             pullDirectory(cleanRemote, localFile)
         } else {
-            pullFileSingle(cleanRemote, localFile, stat.size.takeIf { it >= 0L })
+            // Legacy STAT lstat reports the length of the link, whereas RECV reads the target.
+            pullFileSingle(cleanRemote, localFile, stat.size.takeUnless { isLink })
         }
     }
 
@@ -1241,8 +1400,7 @@ class AdbProtocol(
     }
 
     private fun pullDirectory(remoteDir: String, localDir: File): Boolean {
-        if (!isConnected) return false
-        cancelled = false
+        if (cancelled || !isConnected) return false
 
         if (localDir.exists() && localDir.isFile) {
             onLog("❌ adb pull: remote path is a directory, but local path is a file: ${localDir.absolutePath}")
@@ -1362,6 +1520,7 @@ class AdbProtocol(
         operationCheck()
         cancelled = false
         val check = { operationCheck(); checkArchiveCancellation() }
+        val keyDirectory = adbKeyStore.directory
         val cacheRoot = File(keyDirectory.parentFile ?: keyDirectory, "adb-package-cache")
         onLog("-> adb install ${options.joinToString(" ")} ${archiveFile.name}".trim())
         onLog("ℹ️ Container ${archiveFile.extension.uppercase()}: extracting APK files")
@@ -2061,11 +2220,17 @@ class AdbProtocol(
         fun combinedOutput(): String = listOf(stdout, stderr).filter { it.isNotBlank() }.joinToString("\n")
     }
 
-    fun captureShellCommand(command: String): CapturedShellResult {
+    fun captureShellCommand(command: String, readBudgetMs: Int? = null): CapturedShellResult {
         if (!isConnected) return CapturedShellResult("", "", null, false)
         cancelled = false
-        val result = runShellCommandForResult(command, logOutput = false)
-        return CapturedShellResult(result.stdout, result.stderr, result.exitCode, result.success)
+        val previousDeadline = captureReadDeadlineNs
+        captureReadDeadlineNs = readBudgetMs?.let { System.nanoTime() + it * 1_000_000L }
+        return try {
+            val result = runShellCommandForResult(command, logOutput = false)
+            CapturedShellResult(result.stdout, result.stderr, result.exitCode, result.success)
+        } finally {
+            captureReadDeadlineNs = previousDeadline
+        }
     }
 
     /** Read-only checkpoint. A changing/unreadable log gives no usable boundary. */
@@ -2387,6 +2552,7 @@ class AdbProtocol(
     )
 
     private fun openAdbStream(service: String, logOpen: Boolean = true): AdbStream? {
+        clearExpectedRebootDisconnect()
         val localId = nextLocalId++
         if (logOpen) onLog("-> adb open: $service")
         sendMessageInternal(A_OPEN, localId, 0, "$service\u0000".toByteArray(Charsets.UTF_8))
@@ -2730,6 +2896,31 @@ class AdbProtocol(
         }
     }
 
+    internal fun listDeviceFiles(path: String): List<AdbDeviceDirectory.Entry> {
+        if (!isConnected || !isValidRemotePath(path)) throw IOException("ADB directory unavailable: $path")
+        cancelled = false
+        val stream = openAdbStream("sync:", logOpen = false)
+            ?: throw IOException("Could not open ADB SYNC stream")
+        val listing = try {
+            if (!writeSyncRequest(stream, "LIST", path.toByteArray(Charsets.UTF_8))) {
+                throw IOException("Could not request ADB directory: $path")
+            }
+            AdbDeviceDirectory.read { length ->
+                if (cancelled) throw CancellationException("ADB directory listing cancelled")
+                if (length == 0) EMPTY_PAYLOAD else readAdbStreamExact(stream, length)
+            }
+        } finally {
+            closeAdbStream(stream)
+        }
+        return listing.map { entry ->
+            if (cancelled) throw CancellationException("ADB directory listing cancelled")
+            if (entry.isSymlink) {
+                val target = statRemotePath("${AdbDeviceDirectory.child(path, entry.name)}/", logMissing = false)
+                entry.copy(isDirectory = target?.isDirectory == true)
+            } else entry
+        }.sortedByDescending { it.isDirectory }
+    }
+
     private fun statRemotePath(remotePath: String, logMissing: Boolean = true): SyncStat? {
         val cleanRemote = remotePath
         if (!isValidRemotePath(cleanRemote)) return null
@@ -2824,17 +3015,9 @@ class AdbProtocol(
         return "'" + value.replace("'", "'\\''") + "'"
     }
 
-    private fun clearExpectedServiceDisconnect() {
-        expectedDisconnectService = null
-        expectedDisconnectOpenWritten = false
-        expectedDisconnectObserved = false
-        expectedDisconnectExpiresAtNs = 0L
+    private fun clearExpectedRebootDisconnect() = synchronized(rebootOpenLock) {
+        expectedRebootDisconnectUntilNs = null
     }
-
-    private fun expectedServiceDisconnectWindowActive(): Boolean =
-        expectedDisconnectOpenWritten &&
-            expectedDisconnectExpiresAtNs > 0L &&
-            System.nanoTime() <= expectedDisconnectExpiresAtNs
 
     private fun currentServiceTerminalSignal(): AdbServiceCompletionPolicy.TerminalSignal {
         val dispatcherFailure = (packetDispatcher?.snapshot() ?: lastDispatcherSnapshot)
@@ -2843,7 +3026,7 @@ class AdbProtocol(
             dispatcherFailure
                 ?.takeUnless { it == AdbPacketDispatcher.FailureCode.NONE }
                 ?: directReadFailureCode
-        ) ?: if (!isConnected || expectedDisconnectObserved) {
+        ) ?: if (!isConnected) {
             AdbServiceCompletionPolicy.TerminalSignal.TRANSPORT_CLOSED
         } else {
             AdbServiceCompletionPolicy.TerminalSignal.HEADER_TIMEOUT
@@ -2867,37 +3050,32 @@ class AdbProtocol(
         val normalizedService = service.trim()
         // A new explicit service supersedes any short reboot-disconnect grace
         // left by the previous one-way command.
-        clearExpectedServiceDisconnect()
+        clearExpectedRebootDisconnect()
         if (normalizedService.isBlank()) {
             onLog("❌ ERROR: empty ADB service")
             return false
         }
 
         val oneWayReboot = AdbServiceCompletionPolicy.expectsOneWayDisconnect(normalizedService)
-        if (oneWayReboot) {
-            expectedDisconnectService = normalizedService
-            expectedDisconnectOpenWritten = false
-            expectedDisconnectObserved = false
-            expectedDisconnectExpiresAtNs = 0L
-        }
-
         val localId = nextLocalId++
         var remoteId = 0
         var opened = false
         var idleTimeouts = 0
+        var rebootOpenWritten = false
+        var rebootAccepted = false
 
         onLog("-> adb service: $normalizedService")
         try {
-            sendMessageInternal(
-                A_OPEN,
-                localId,
-                0,
-                "$normalizedService\u0000".toByteArray(Charsets.UTF_8)
-            )
+            val payload = "$normalizedService\u0000".toByteArray(Charsets.UTF_8)
             if (oneWayReboot) {
-                expectedDisconnectOpenWritten = true
-                expectedDisconnectExpiresAtNs = System.nanoTime() + EXPECTED_REBOOT_DISCONNECT_WINDOW_NS
-                onLog("ℹ️ ADB reboot service was fully sent; further USB disconnect is an expected transition.")
+                synchronized(rebootOpenLock) {
+                    sendMessageInternal(A_OPEN, localId, 0, payload)
+                    rebootOpenWritten = true
+                    expectedRebootDisconnectUntilNs = System.nanoTime() + EXPECTED_REBOOT_DISCONNECT_WINDOW_NS
+                }
+                onLog("ℹ️ ADB reboot service was fully sent; a transport disconnect is expected during the transition.")
+            } else {
+                sendMessageInternal(A_OPEN, localId, 0, payload)
             }
 
             while (!cancelled) {
@@ -2906,14 +3084,12 @@ class AdbProtocol(
                     val signal = currentServiceTerminalSignal()
                     if (AdbServiceCompletionPolicy.isExpectedCompletion(
                             normalizedService,
-                            expectedDisconnectOpenWritten,
+                            rebootOpenWritten,
                             signal
                         )
                     ) {
-                        if (signal == AdbServiceCompletionPolicy.TerminalSignal.TRANSPORT_CLOSED) {
-                            expectedDisconnectObserved = true
-                        }
-                        onLog("✅ ADB reboot command accepted: device started the transition and may temporarily disappear from USB.")
+                        rebootAccepted = true
+                        onLog("✅ ADB reboot command accepted: device started the transition and may temporarily disconnect.")
                         return true
                     }
                     if (signal == AdbServiceCompletionPolicy.TerminalSignal.EXPLICIT_PROTOCOL_FAILURE) {
@@ -2938,6 +3114,11 @@ class AdbProtocol(
                     }
                     continue
                 }
+                if (!packetTargetsLocalStream(header, localId)) {
+                    if (header.dataLength > 0) readData(header.dataLength)
+                    acknowledgeRemoteClose(header.arg1, header.arg0)
+                    continue
+                }
                 idleTimeouts = 0
 
                 when (header.command) {
@@ -2955,7 +3136,7 @@ class AdbProtocol(
                     A_CLSE -> {
                         if (header.dataLength > 0) readData(header.dataLength)
                         if (remoteId != 0) sendMessageInternal(A_CLSE, localId, remoteId, EMPTY_PAYLOAD)
-                        if (oneWayReboot) expectedDisconnectObserved = true
+                        rebootAccepted = oneWayReboot
                         onLog("=== ADB SERVICE CLOSED ===")
                         return true
                     }
@@ -2966,24 +3147,21 @@ class AdbProtocol(
                 }
             }
         } catch (e: Exception) {
-            if (AdbServiceCompletionPolicy.isExpectedCompletion(
+            if (!cancelled && AdbServiceCompletionPolicy.isExpectedCompletion(
                     normalizedService,
-                    expectedDisconnectOpenWritten,
+                    rebootOpenWritten,
                     AdbServiceCompletionPolicy.TerminalSignal.TRANSPORT_FAILURE
                 )
             ) {
-                expectedDisconnectObserved = true
+                rebootAccepted = true
                 onLog("✅ ADB reboot command accepted; transport closed during expected reboot hand-off.")
                 return true
             }
             onLog("ERROR ADB service: ${e.message ?: e.javaClass.simpleName}")
             return false
         } finally {
-            if (expectedDisconnectService == normalizedService &&
-                (!oneWayReboot || !expectedDisconnectOpenWritten || expectedDisconnectObserved)
-            ) {
-                clearExpectedServiceDisconnect()
-            }
+            // The peer may close its service stream before the socket or USB transport.
+            if (oneWayReboot && !rebootAccepted) clearExpectedRebootDisconnect()
         }
 
         onLog("⚠️ ADB service cancelled by user")
@@ -3028,6 +3206,11 @@ class AdbProtocol(
         putIntLe(header, 12, data.size)
         putIntLe(header, 16, checksum)
         putIntLe(header, 20, command.inv().toInt())
+
+        wirelessTransport?.let {
+            it.write(header, data)
+            return@synchronized
+        }
 
         if (!bulkWriteFully(header)) throw Exception("ADB header transfer error")
         if (!finishAdbUsbOutTransfer(header.size)) {
@@ -3115,34 +3298,38 @@ class AdbProtocol(
         lastDispatcherSnapshot = null
         lateinit var dispatcher: AdbPacketDispatcher
         dispatcher = AdbPacketDispatcher(
-            source = { timeoutMs -> readCompletePacketDirect(timeoutMs) },
+            source = { timeoutMs ->
+                try {
+                    readCompletePacketDirect(timeoutMs)
+                } catch (error: IOException) {
+                    AdbPacketDispatcher.ReadResult.Failed(
+                        AdbPacketDispatcher.FailureCode.DEVICE_DISCONNECTED,
+                        error.message ?: "ADB Wireless debugging connection closed"
+                    )
+                }
+            },
             onFailure = { code, message ->
                 if (dispatcherGeneration.get() == generation) {
                     lastDispatcherSnapshot = dispatcher.snapshot()
-                    val expectedService = expectedDisconnectService
+                    dispatcherTransportFailed = true
+                    // Wake an in-flight socket write before waiting for its reboot OPEN outcome.
+                    closeWirelessTransport()
+                    runCatching { connection?.close() }
+                    connection = null
                     val disconnectLike = code == AdbPacketDispatcher.FailureCode.USB_IN_FAILED ||
                         code == AdbPacketDispatcher.FailureCode.DEVICE_DISCONNECTED
-                    val expected = expectedService != null && disconnectLike &&
-                        expectedServiceDisconnectWindowActive() &&
-                        AdbServiceCompletionPolicy.isExpectedCompletion(
-                            service = expectedService,
-                            openPacketWritten = expectedDisconnectOpenWritten,
-                            signal = AdbServiceCompletionPolicy.TerminalSignal.TRANSPORT_FAILURE
-                        )
-                    dispatcherTransportFailed = true
+                    val expected = disconnectLike && synchronized(rebootOpenLock) {
+                        !cancelled && expectedRebootDisconnectUntilNs?.let { System.nanoTime() - it <= 0L } == true
+                    }
                     if (expected) {
-                        expectedDisconnectObserved = true
                         onLog(
                             "ℹ️ ADB reboot was sent to the device; expected transport disconnect " +
                                 "[${code.name}] is not considered an operation error."
                         )
-                        runCatching { connection?.close() }
-                        connection = null
+                        onExpectedRebootDisconnect?.invoke()
                     } else {
                         onLog("❌ ADB reader stopped [${code.name}]: $message")
                         cancelled = true
-                        runCatching { connection?.close() }
-                        connection = null
                         onTransportFailure?.invoke(code, message)
                     }
                 }
@@ -3156,8 +3343,10 @@ class AdbProtocol(
     }
 
     private fun stopPacketDispatcher(reason: String) {
-        val dispatcher = packetDispatcher ?: return
         dispatcherGeneration.incrementAndGet()
+        // A socket close wakes the blocking network reader before stop() joins it.
+        closeWirelessTransport()
+        val dispatcher = packetDispatcher ?: return
         dispatcher.stop()
         lastDispatcherSnapshot = dispatcher.snapshot()
         packetDispatcher = null
@@ -3166,7 +3355,7 @@ class AdbProtocol(
     }
 
     private fun readCompletePacketDirect(timeoutMs: Int): AdbPacketDispatcher.ReadResult {
-        if (connection == null || endpointIn == null) return AdbPacketDispatcher.ReadResult.Closed
+        if (!isConnected) return AdbPacketDispatcher.ReadResult.Closed
         directReadFailureCode = null
         directReadFailureMessage = null
         val header = readHeaderDirect(timeoutMs) ?: return directReadFailureCode?.let { code ->
@@ -3196,13 +3385,18 @@ class AdbProtocol(
     }
 
     private fun readHeader(timeoutMs: Int = 10000): AdbHeader? {
+        val readTimeout = captureReadDeadlineNs?.let { deadline ->
+            val remainingNs = deadline - System.nanoTime()
+            if (remainingNs <= 0L) return null
+            minOf(timeoutMs.toLong(), (remainingNs + 999_999L) / 1_000_000L).toInt()
+        } ?: timeoutMs
         val dispatcher = packetDispatcher
-        if (dispatcher == null) return readHeaderDirect(timeoutMs)
+        if (dispatcher == null) return readHeaderDirect(readTimeout)
         if (dispatchedPayloadPacket != null) {
             onLog("❌ ADB dispatcher protocol misuse: previous payload was not consumed")
             return null
         }
-        val packet = dispatcher.take(timeoutMs) ?: return null
+        val packet = dispatcher.take(readTimeout) ?: return null
         if (packet.payload.isNotEmpty()) dispatchedPayloadPacket = packet
         return AdbHeader(
             command = packet.command,
@@ -3227,9 +3421,14 @@ class AdbProtocol(
 
     // timeoutMs — параметр для AUTH-ожидания (до 30 сек)
     private fun readHeaderDirect(timeoutMs: Int = 10000): AdbHeader? {
+        val buffer = inboundHeaderBuffer
+        wirelessTransport?.let {
+            it.readFully(buffer)
+            return parseInboundHeader(buffer)
+        }
+
         val conn = connection ?: return null
         val ep = endpointIn ?: return null
-        val buffer = inboundHeaderBuffer
         var totalRead = 0
 
         while (totalRead < buffer.size) {
@@ -3246,6 +3445,10 @@ class AdbProtocol(
             totalRead += read
         }
 
+        return parseInboundHeader(buffer)
+    }
+
+    private fun parseInboundHeader(buffer: ByteArray): AdbHeader? {
         val cmd   = readIntLe(buffer, 0).toLong() and 0xFFFFFFFFL
         val a0    = readIntLe(buffer, 4)
         val a1    = readIntLe(buffer, 8)
@@ -3289,9 +3492,12 @@ class AdbProtocol(
     }
 
     private fun readDataDirect(length: Int): ByteArray? {
-        val conn = connection ?: return null
-        val ep = endpointIn ?: return null
         if (length < 0 || length > MAX_PAYLOAD) return null
+
+        val wireless = wirelessTransport
+        val conn = connection
+        val ep = endpointIn
+        if (wireless == null && (conn == null || ep == null)) return null
 
         val expectedChecksum = pendingInboundChecksum
         val expectedLength = pendingInboundLength
@@ -3322,20 +3528,22 @@ class AdbProtocol(
         }
 
         val buffer = ByteArray(length)
-        var totalRead = 0
-
-        while (totalRead < length) {
-            // Keep individual host-controller transactions bounded, but read
-            // directly into the final payload buffer to avoid one allocation
-            // and one memcpy for every USB chunk.
-            val chunkLength = minOf(USB_BULK_CHUNK_BYTES, length - totalRead)
-            val read = conn.bulkTransfer(ep, buffer, totalRead, chunkLength, 5000)
-            if (read <= 0) {
-                directReadFailureCode = if (connection == null) AdbPacketDispatcher.FailureCode.DEVICE_DISCONNECTED else AdbPacketDispatcher.FailureCode.USB_IN_FAILED
-                directReadFailureMessage = "ADB payload USB IN failed after $totalRead/$length bytes (result=$read)"
-                return null
+        if (wireless != null) {
+            wireless.readFully(buffer)
+        } else {
+            val usb = requireNotNull(conn)
+            var totalRead = 0
+            while (totalRead < length) {
+                // Keep USB transactions bounded and read directly into the final buffer.
+                val chunkLength = minOf(USB_BULK_CHUNK_BYTES, length - totalRead)
+                val read = usb.bulkTransfer(ep, buffer, totalRead, chunkLength, 5000)
+                if (read <= 0) {
+                    directReadFailureCode = if (connection == null) AdbPacketDispatcher.FailureCode.DEVICE_DISCONNECTED else AdbPacketDispatcher.FailureCode.USB_IN_FAILED
+                    directReadFailureMessage = "ADB payload USB IN failed after $totalRead/$length bytes (result=$read)"
+                    return null
+                }
+                totalRead += read
             }
-            totalRead += read
         }
 
         if (expectedChecksum != null && !AdbPacketChecksum.isValid(
@@ -3354,12 +3562,17 @@ class AdbProtocol(
         return buffer
     }
 
+    private fun closeWirelessTransport() {
+        wirelessReady = false
+        runCatching { wirelessTransport?.close() }
+    }
+
     fun disconnect() {
         cancelled = true
-        clearExpectedServiceDisconnect()
         stopPacketDispatcher("disconnect")
         adbInterface?.let { iface -> runCatching { connection?.releaseInterface(iface) } }
         runCatching { connection?.close() }
+        clearExpectedRebootDisconnect()
         connection   = null
         endpointIn   = null
         endpointOut  = null

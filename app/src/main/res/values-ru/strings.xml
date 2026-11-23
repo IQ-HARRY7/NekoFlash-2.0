@@ -34,6 +34,32 @@
     <string name="delete_upper">УДАЛИТЬ</string>
     <string name="cancel_upper">ОТМЕНА</string>
     <string name="close_upper">ЗАКРЫТЬ</string>
+    <string name="adb_device_files">Файлы устройства</string>
+    <string name="adb_device_files_location">Файлы устройства · %1$s</string>
+    <string name="adb_device_files_up">Вверх</string>
+    <string name="adb_device_files_pull_directory">Скачать папку</string>
+    <string name="adb_device_files_push_here">Отправить сюда</string>
+    <string name="adb_device_files_loading">Открываем папку…</string>
+    <string name="adb_device_files_unavailable">Не удалось открыть папку. Подробности в журнале операций.</string>
+    <string name="adb_device_files_no_entries">Нет файлов и папок для отображения.</string>
+    <string name="adb_device_files_connection_changed">Подключение ADB изменилось. Откройте файлы устройства заново.</string>
+    <string name="adb_wifi_title">ADB по Wi-Fi</string>
+    <string name="adb_wifi_instructions">На целевом устройстве откройте «Для разработчиков › Беспроводная отладка» (Android 11 или новее). Вставьте IP-адрес и порт с основного экрана в поле адреса или укажите их отдельно. Порт сопряжения и код появятся после выбора «Сопряжение с помощью кода».</string>
+    <string name="adb_wifi_host">IP-адрес, имя хоста или IP:порт</string>
+    <string name="adb_wifi_connection_port">Порт подключения</string>
+    <string name="adb_wifi_pairing_port">Порт сопряжения</string>
+    <string name="adb_wifi_pairing_code">6-значный код сопряжения</string>
+    <string name="adb_wifi_host_error">Введите адрес или адрес с корректным портом</string>
+    <string name="adb_wifi_port_error">Введите порт от 1 до 65535</string>
+    <string name="adb_wifi_code_error">Введите шесть цифр, показанных на устройстве</string>
+    <string name="adb_wifi_pair">Сопрячь</string>
+    <string name="adb_wifi_connect">Подключить</string>
+    <string name="adb_wifi_disconnect">Отключить ADB по Wi-Fi</string>
+    <string name="adb_wifi_pairing">Сопряжение…</string>
+    <string name="adb_wifi_paired">Сопряжение готово. Используйте адрес и порт с основного экрана беспроводной отладки и нажмите «Подключить».</string>
+    <string name="adb_wifi_pair_failed">Сопряжение не удалось. Проверьте адрес, порт сопряжения и действующий код, затем попробуйте ещё раз.</string>
+    <string name="adb_wifi_restart_transport">Перезапустите NekoFlash, чтобы завершить закрытие предыдущего сеанса перед подключением.</string>
+    <string name="adb_wifi_endpoint">ADB по Wi-Fi · %1$s</string>
     <string name="ok_understood_upper">ПОНЯТНО</string>
     <string name="open_upper">ОТКРЫТЬ</string>
     <string name="later_upper">ПОЗЖЕ</string>
@@ -239,6 +265,7 @@
     <string name="local_terminal_replace_message">Файл по пути %1$s уже существует.</string>
     <string name="local_terminal_replace">Заменить</string>
     <string name="layout_operation_cancel">Отменить операцию</string>
+    <string name="layout_operation_all_steps">Все шаги</string>
     <plurals name="layout_operation_steps_more">
         <item quantity="one">… и ещё %1$d шаг</item>
         <item quantity="few">… и ещё %1$d шага</item>
@@ -376,8 +403,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <!-- Quick Flash slot selection -->
     <string name="quick_flash_slot_dialog_title">Куда прошить %1$s</string>
     <string name="quick_flash_slot_dialog_message">Для этого раздела устройство сообщает has-slot=yes. Выберите целевой слот перед выбором образа.</string>
-    <string name="quick_flash_active_slot_target">Активный слот %1$s → %2$s</string>
-    <string name="quick_flash_current_slot">текущий</string>
+    <string name="quick_flash_active_slot_target">Активный слот на момент прошивки</string>
     <string name="quick_flash_all_slots_range" tools:ignore="TypographyDashes">Все слоты a–%1$s (--slot=all)</string>
     <string name="quick_flash_all_slots" tools:ignore="TypographyDashes">Все слоты (--slot=all)</string>
 
@@ -515,6 +541,23 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="flash_rev7_device_control">Управление устройством</string>
     <string name="flash_rev7_reboot">Перезагрузка (вручную)</string>
     <string name="flash_rev7_add_image">Добавить / заменить образ</string>
+    <string name="mass_flash_pick_multiple">Файлы Android · несколько образов</string>
+    <string name="mass_flash_assign_partitions">Разделы для выбранных образов</string>
+    <string name="mass_flash_loading_images">Загрузка имён файлов…</string>
+    <string name="mass_flash_add_to_queue">Добавить в очередь</string>
+    <string name="mass_flash_slot_title">Слот для очереди</string>
+    <string name="mass_flash_slot_as_listed">Как в очереди</string>
+    <string name="mass_flash_slot_value">Слот · %1$s</string>
+    <string name="mass_flash_preview_button">План</string>
+    <string name="mass_flash_preview_title">План прошивки</string>
+    <string name="mass_flash_preview_loading">Уточняем цели по Fastboot…</string>
+    <string name="mass_flash_preview_unresolved">%1$s · точная цель по слоту недоступна</string>
+    <string name="mass_flash_preview_repeated">%1$s · повтор цели</string>
+    <string name="mass_flash_preview_row">%1$d. %2$s ← %3$s</string>
+    <string name="mass_flash_repeated_targets">Повторяющиеся цели в очереди · %1$s</string>
+    <string name="mass_flash_step_not_run">Шаг пропущен</string>
+    <string name="mass_flash_step_error">Ошибка прошивки %1$s. %2$s</string>
+    <string name="mass_flash_result">Очередь прошивки · записано %1$d · ошибок %2$d · пропущено %3$d</string>
     <string name="flash_rev7_queue_empty">Список пуст</string>
     <string name="flash_rev7_flash_queue">Прошить очередь</string>
     <string name="flash_rev7_info">Сведения / getvar</string>
@@ -543,7 +586,6 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="flash_rev7_row_down">Вниз</string>
     <string name="flash_rev7_row_remove">Удалить</string>
     <string name="flash_rev7_invalid_target">Неверное имя раздела. Укажите точный идентификатор.</string>
-    <string name="flash_rev7_slot_unknown">Нельзя вычислить другой слот без current-slot. Выберите конкретный слот.</string>
     <string name="flash_rev7_no_file_error">Сначала выберите образ.</string>
     <string name="mi_unlock_advanced_options">Дополнительные параметры</string>
     <string name="mi_unlock_status_unverified">Состояние загрузчика не подтверждено; подключите Fastboot и обновите сведения</string>

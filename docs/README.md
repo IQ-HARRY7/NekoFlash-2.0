@@ -4,9 +4,8 @@ This directory intentionally separates **current operational documentation** fro
 
 ## Current sources of truth
 
-- [STATUS.md](STATUS.md) — current release/main state and known limitations.
-- [AUDIT_2026-11-13.md](AUDIT_2026-11-13.md) — post-release repository audit and its verified findings.
-- [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md) — current hardware qualification boundary.
+- [STATUS.md](STATUS.md) — signed release, development changes, and automated validation for the exact source snapshots.
+- [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md) — hardware results by build, device, and operation, with links to the physical evidence ledgers.
 - [USB_CONNECTION_TROUBLESHOOTING.md](USB_CONNECTION_TROUBLESHOOTING.md) — current USB/OTG troubleshooting.
 - [SECURITY.md](SECURITY.md) — application security/privacy model.
 - [REPOSITORY_SECURITY.md](REPOSITORY_SECURITY.md) — CI, signing and GitHub administration state.
@@ -14,9 +13,9 @@ This directory intentionally separates **current operational documentation** fro
 - [PROFESSIONAL_RECOVERY_POLICY.md](PROFESSIONAL_RECOVERY_POLICY.md) — raw diagnostic and expert-operation policy.
 - [../PRIVACY.md](../PRIVACY.md) and [../THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
 
-## Evidence, not instructions
+## Historical evidence
 
-- [testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-EN.md](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-EN.md) and the [RU ledger](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-RU.md) retain a compact chronology of physical FAIL → fix → PASS evidence.
+- [AUDIT_2026-11-13.md](AUDIT_2026-11-13.md) — repository audit at the Alpha11 release, including GitHub settings observed on 13 November.
 - [evidence/](evidence/) contains older device-specific release evidence.
 - [design-approved/](design-approved/) contains historical approved mockups/decisions. They are not current implementation instructions.
 
@@ -30,4 +29,4 @@ Public static sources are mirrored in this directory. The Site source repository
 
 [4PDA_POST_RU.bbcode](4PDA_POST_RU.bbcode) is the copyable forum draft, including the Xiaomi unlock tester request. It has not been submitted to 4PDA by the assistant.
 
-Public guides must describe the shipped behavior. Documentation CI checks local links and rejects known stale references. Search Console ownership is verified through `googlee972052e7ba1ecb2.html`; preserve this file at the public root. Google accepted the sitemap and discovered 12 URLs. Search-engine indexing remains a separate outcome; see STATUS.md for the verified submission state.
+Public guides describe shipped behavior. Documentation CI checks local links and known stale references. Search Console ownership uses `googlee972052e7ba1ecb2.html` at the public root. See the recorded sitemap submission and discovery counts in [STATUS.md](STATUS.md#public-website).

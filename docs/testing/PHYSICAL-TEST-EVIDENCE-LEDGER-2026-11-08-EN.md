@@ -1,6 +1,6 @@
 # NekoFlash 2.0 — physical evidence ledger
 
-This is a compact chronology of evidence that materially affects current behavior. It is **not a test assignment list**. Earlier low-level REV notes remain available in Git history and closed issues/PRs.
+This chronology records the build and device evidence behind [HARDWARE_VALIDATION.md](../HARDWARE_VALIDATION.md). Earlier low-level REV notes remain available in Git history and closed issues/PRs.
 
 ## 22 November 2026 — POCO F5 (marble) Xiaomi Unlock and Recovery
 
@@ -14,7 +14,7 @@ Signed build `6.0.0-alpha15+ce33b0aba8d1.44412579509`, Android-to-Android over U
 | 23:31:47 | Flash was requested without a Fastboot connection. No command was sent. | No write attempted |
 | 23:32:06–23:32:16 | After reconnection the bootloader still reported `unlocked=yes`. The same slot check, `flash:recovery` and `reboot-recovery` sequence repeated with the same results. The supplied photo shows the recovery file browser listing `/sdcard`. | Repeated Recovery write and reboot command FIELD PASS; Recovery UI observed |
 
-The confirmation screen showed `slot: all`, while the wire trace contains two separate `flash:recovery` writes with no `flash:recovery_a`, `flash:recovery_b` or active-slot change. The device-wide `slot-count=2` and `current-slot=a` establish A/B on the device. The layout of `recovery` and writes to both slots remain **unverified**. The fallback is logged in the console. A follow-up should verify partition names with read-only Fastboot queries and surface the resolved write target before confirmation.
+The confirmation screen showed `slot: all`, while the wire trace contains two separate `flash:recovery` writes with no `flash:recovery_a`, `flash:recovery_b` or active-slot change. The device-wide `slot-count=2` and `current-slot=a` establish A/B on the device. The layout of `recovery` and writes to both slots remain **unverified**. The fallback is logged in the console. See the [development snapshot](../STATUS.md#development-snapshot) for later slot-handling changes and automated verification.
 
 ## 13 November 2026 — release acceptance
 

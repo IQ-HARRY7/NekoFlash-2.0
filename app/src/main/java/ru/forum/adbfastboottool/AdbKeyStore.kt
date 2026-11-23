@@ -28,7 +28,7 @@ import javax.crypto.Cipher
  * historical mincrypt RSAPublicKey structure used by platform-tools.
  */
 class AdbKeyStore(
-    private val directory: File,
+    internal val directory: File,
     private val onLog: (String) -> Unit
 ) {
     private val privateKeyFile = File(directory, "adbkey.pk8")

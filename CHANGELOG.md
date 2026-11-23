@@ -8,9 +8,25 @@
 
 ## Unreleased
 
+### ADB
+
+- Added ADB over Wi-Fi using Android 11+ Wireless debugging. Pair with the target's pairing port and six-digit code, then connect using its separate connection port. Paste `IP:port` in the address field or enter the two values separately. Shell and file transfers use the active ADB connection.
+- Added multi-source `adb push` and `adb pull`. The last argument for a batch is an existing destination directory.
+- Added **Device files** to browse the target from `/sdcard` and pull files or folders to the host workspace. **Send here** streams files from the Android document picker into the selected target directory.
+
+### Fastboot
+
+- Mass Flash accepts several images from one Android file picker and lets you assign each image to a partition. The saved queue retains its order and slot choice (**As listed**, **A**, **B** or **All slots**).
+- The Mass Flash **Plan** shows concrete targets in execution order and marks repeats. Slot expansion uses `has-slot` for each partition. Explicit targets such as `boot_a` and entries without a positive `has-slot` reply use the listed name.
+- The Operation Center shows counts for written, failed and skipped Mass Flash targets, including results from a queue that stops partway through. For longer queues, **All steps** opens the full list.
+- Quick Flash resolves the current or other slot against the live Fastboot connection at execution time. Explicit targets such as `boot_b` are sent as listed.
+
+### Terminal
+
 - Added a local terminal for `Download/NekoFlash`, based on the contribution by **@IQ-HARRY7** in [PR #106](https://github.com/Ncorror/NekoFlash-2.0/pull/106). Use `local help` for commands such as `cat`, `grep`, `mkdir`, `cp`, `mv` and `clear`.
 - Local copies show the bytes transferred. Copy progress, the working directory and pending overwrite prompts survive screen recreation. `local clear` clears the terminal display. The Logs menu can change the terminal text size.
 - The command field shows when input goes to an interactive ADB Shell. The local help and copy controls are available in English and Russian.
+- Added a terminal welcome panel, local pipelines (`|`), success-based chaining (`&&`), and optional read-only diagnostics on the host phone. The deletion prompt shows the workspace-relative file path and the terminal displays command exit status. [IQ-HARRY7's terminal update](https://github.com/Ncorror/NekoFlash-2.0/pull/108) and [review fixes](https://github.com/Ncorror/NekoFlash-2.0/pull/110).
 
 ## 6.0.0-alpha15 — 19 November 2026
 

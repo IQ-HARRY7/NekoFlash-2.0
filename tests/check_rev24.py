@@ -23,8 +23,12 @@ assert 'outState.putString("mass_picker_partition", pendingMassPartition)' in ma
 assert 'pendingQueueSources[target] != generation' in vm
 assert 'generation != quickSourceGeneration' in vm
 queue = vm.split('private fun runFlashQueue(')[1].split('private fun formatBytesShort(')[0]
-assert queue.index('item.selection.verify(') < queue.index('flashImage(proto, item.partition, item.selection.source()')
-assert 'expectedSizeBytes = item.selection.expectedSizeBytes' in queue
+if 'MassFlashPlan.resolve(draft)' in queue:
+    assert queue.index('FirmwareSelection.from(item).verify(') < queue.index('flashImage(proto, target, FirmwareSelection.from(item.source).source()')
+    assert 'expectedSizeBytes = item.source.expectedSizeBytes' in queue
+else:
+    assert queue.index('item.selection.verify(') < queue.index('flashImage(proto, item.partition, item.selection.source()')
+    assert 'expectedSizeBytes = item.selection.expectedSizeBytes' in queue
 assert 'execute.isEnabled = draft.items.isNotEmpty() && sources.pending.isEmpty()' in (java / 'MassFlashQueueUi.kt').read_text()
 assert '.copyTo(' not in selection
 assert (root / 'app/src/androidTest/AndroidManifest.xml').is_file()

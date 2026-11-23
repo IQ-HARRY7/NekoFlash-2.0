@@ -41,11 +41,14 @@ Direct dependencies declared by the current project include:
 - AndroidX Lifecycle ViewModel KTX / SavedState / LiveData KTX / Runtime KTX `2.11.0` — Apache License 2.0;
 - AndroidX Palette KTX `1.0.0` — Apache License 2.0;
 - Material Components for Android `1.14.0` — Apache License 2.0;
-- Kotlin runtime used by Kotlin plugin `2.3.21` — Apache License 2.0;
+- adb-kt `1.0.13` by rhythmcache for Android Wireless debugging — Apache License 2.0;
+- Kotlin Android compiler plugin `2.3.21` — Apache License 2.0;
 - kotlinx-coroutines-android `1.11.0` — Apache License 2.0;
 - Gradle Wrapper files included in the source tree — Apache License 2.0.
 
 Transitive dependencies are resolved by Gradle and may carry additional notices.
+
+The declared adb-kt runtime dependencies include spake2-kt `v1.0.2` (Apache License 2.0), Bouncy Castle Java `1.85` (Bouncy Castle license), Okio JVM `3.18.1` (Apache License 2.0) and Kotlin standard library `2.4.10` (Apache License 2.0).
 
 Upstream license references:
 
@@ -53,6 +56,10 @@ Upstream license references:
 - Material Components: https://github.com/material-components/material-components-android/blob/master/LICENSE
 - Kotlin: https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt
 - kotlinx.coroutines: https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt
+- adb-kt: https://github.com/rhythmcache/adb-kt/blob/v1.0.13/LICENSE
+- spake2-kt: https://github.com/rhythmcache/spake2-kt/blob/v1.0.2/LICENSE
+- Bouncy Castle: https://www.bouncycastle.org/licence.html
+- Okio JVM: https://github.com/lysine-dev/okio/blob/master/LICENSE.txt
 - Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0.txt
 
 ## Bundled filesystem executables (distributed in the APK)
@@ -62,7 +69,7 @@ Upstream license references:
 - **e2fsprogs 1.47.0 / `mke2fs`** — upstream filesystem-creation utility, with GPL-2.0 and component-specific LGPL/BSD/MIT notices.
 - **f2fs-tools 1.16.0 / `mkfs.f2fs`** — upstream filesystem-creation utility, GPL-2.0 and its corresponding upstream notices.
 
-NekoFlash invokes these as separate executables. They are **not** relicensed under the project's Apache-2.0 license. Preserve upstream license and copyright notices: the APK packages them under `assets/filesystem-tools/`.
+The APK ships these as separate executables and includes their upstream license and copyright notices under `assets/filesystem-tools/`. They retain their upstream licenses. Fastboot format and wipe use NekoFlash's in-process sparse filesystem generators.
 
 **Corresponding source:** release distributions must retain the companion `filesystem-tools-source.tar.gz` containing the pinned upstream source archives, manifest and rebuild scripts. The [filesystem tools README](vendor/filesystems/README.md) and [pinned manifest](vendor/filesystems/manifest.json) describe versions, provenance and offline rebuild steps. Distributors should provide that corresponding-source archive alongside the APK; publishing only the APK is not the complete distribution described here.
 

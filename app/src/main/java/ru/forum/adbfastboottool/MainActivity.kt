@@ -1,5 +1,6 @@
 package ru.forum.adbfastboottool
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
@@ -91,6 +92,7 @@ class MainActivity : AppCompatActivity() {
     private var tvOtgStatus: TextView? = null
     private lateinit var cardOperationCenter: MaterialCardView
     private var operationCenterDialog: BottomSheetDialog? = null
+    private var operationStepsDialog: androidx.appcompat.app.AlertDialog? = null
     private var operationCenterRestoredPosition = 0
     private var pausedOperationCenterPosition: Int? = null
     private lateinit var operationCenterScroll: OperationCenterScrollView
@@ -105,6 +107,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var tvOperationCenterPercent: TextView
     private lateinit var tvOperationCenterStepSummary: TextView
     private lateinit var tvOperationStepQueue: TextView
+    private lateinit var btnOperationFullSteps: View
     private lateinit var cardOperationStrip: MaterialCardView
     private lateinit var tvOperationStripTitle: TextView
     private lateinit var tvOperationStripMeta: TextView
@@ -147,6 +150,8 @@ class MainActivity : AppCompatActivity() {
     private var selectedSideloadSource: FirmwareSource.SafDocument? = null
     private lateinit var quickImageLauncher: ActivityResultLauncher<Intent>
     private lateinit var massImageLauncher: ActivityResultLauncher<Intent>
+    private lateinit var massBatchImageLauncher: ActivityResultLauncher<Array<String>>
+    private lateinit var adbPushDocumentLauncher: ActivityResultLauncher<Array<String>>
     private var pendingMassPartition: String? = null
     private lateinit var miLoginLauncher: ActivityResultLauncher<Intent>
     private lateinit var diagnosticZipLauncher: ActivityResultLauncher<Intent>
@@ -216,6 +221,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var massQueueUi: MassFlashQueueUi
     private var restoredMassQueueState: Bundle? = null
+    private var massFlashPreviewDialog: androidx.appcompat.app.AlertDialog? = null
 
     private val commandHistory = mutableListOf<String>()
     private var historyIndex = -1
@@ -232,8 +238,8 @@ class MainActivity : AppCompatActivity() {
         data class FastbootFetch(val partition: String, val outputFile: File, val slot: String? = null) : TerminalAction()
         data class AdbService(val service: String) : TerminalAction()
         data class AdbShell(val command: String, val redirect: AdbProtocol.ShellRedirect? = null) : TerminalAction()
-        data class AdbPush(val localFile: File, val remotePath: String) : TerminalAction()
-        data class AdbPull(val remotePath: String, val localFile: File) : TerminalAction()
+        data class AdbPush(val localFiles: List<File>, val remotePath: String) : TerminalAction()
+        data class AdbPull(val remotePaths: List<String>, val localFile: File) : TerminalAction()
         data class AdbInstall(val packageFile: File, val options: List<String>) : TerminalAction()
         data class AdbInstallMultiple(val apkFiles: List<File>, val options: List<String>) : TerminalAction()
     }
@@ -253,6 +259,7 @@ class MainActivity : AppCompatActivity() {
         selectedFastbootSection = savedInstanceState?.getInt("fastboot_section", 0) ?: 0
         pendingMassPartition = savedInstanceState?.getString("mass_picker_partition")
         restoredMassQueueState = savedInstanceState?.getBundle("mass_queue_ui")
+        adbWifiDraft = AdbWifiDialog.Draft.fromBundle(savedInstanceState?.getBundle(STATE_ADB_WIFI_DRAFT))
 
         // Never trust exported Intent extras as an onboarding bypass. This
         // check also covers ACTION_USB_DEVICE_ATTACHED, activity recreation,
@@ -321,6 +328,7 @@ class MainActivity : AppCompatActivity() {
         tvOperationCenterPercent = findViewById(R.id.tvOperationCenterPercent)
         tvOperationCenterStepSummary = findViewById(R.id.tvOperationCenterStepSummary)
         tvOperationStepQueue = findViewById(R.id.tvOperationStepQueue)
+        btnOperationFullSteps = findViewById(R.id.btnOperationFullSteps)
         cardOperationStrip = findViewById(R.id.cardOperationStrip)
         tvOperationStripTitle = findViewById(R.id.tvOperationStripTitle)
         tvOperationStripMeta = findViewById(R.id.tvOperationStripMeta)
@@ -491,6 +499,8 @@ class MainActivity : AppCompatActivity() {
                 result.data?.data?.let(::exportDiagnosticArchive)
             }
         }
+        registerMassBatchImageLauncher()
+        registerAdbPushDocumentLauncher()
         setupButtons()
         setupFastbootWorkflowUi()
         initializeOperationCenterDialog()
@@ -555,12 +565,17 @@ class MainActivity : AppCompatActivity() {
             // restore, when ViewModel and transcript observers are ready.
             consoleDockController.restoreState(savedInstanceState?.getBoolean("rev26.terminal.open") == true)
         }
+        if (viewModelReady && savedInstanceState?.getBoolean(STATE_ADB_WIFI_OPEN) == true) {
+            openAdbWifiDialog()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putInt("fastboot_section", selectedFastbootSection)
         outState.putString("mass_picker_partition", pendingMassPartition)
         if (::massQueueUi.isInitialized) outState.putBundle("mass_queue_ui", massQueueUi.saveFormState())
+        outState.putBundle(STATE_ADB_WIFI_DRAFT, adbWifiDraft.toBundle())
+        outState.putBoolean(STATE_ADB_WIFI_OPEN, adbWifiDialog?.isShowing == true)
         selectedSideloadSource?.let { source ->
             outState.putString(STATE_SIDELOAD_URI, source.uri.toString())
             outState.putString(STATE_SIDELOAD_NAME, source.displayName)
@@ -604,6 +619,16 @@ class MainActivity : AppCompatActivity() {
             specs.isVisible = !specs.isVisible
         }
         findViewById<View>(R.id.btnOperationCenterMinimize).setOnClickListener { operationCenterDialog?.dismiss() }
+        btnOperationFullSteps.setOnClickListener {
+            val rows = viewModel.operationSteps.value.orEmpty().map(::formatOperationStep)
+            if (rows.isNotEmpty()) {
+                operationStepsDialog = MaterialAlertDialogBuilder(this)
+                    .setTitle(R.string.layout_operation_all_steps)
+                    .setItems(rows.toTypedArray(), null)
+                    .setNegativeButton(R.string.close_upper, null)
+                    .show()
+            }
+        }
         findViewById<Button>(R.id.btnOperationCenterConsole).setOnClickListener {
             operationCenterDialog?.dismiss()
             openConsole(requestCommandFocus = false)
@@ -657,6 +682,8 @@ class MainActivity : AppCompatActivity() {
         }
         updateSideloadSelectionUi()
         findViewById<View>(R.id.btnSideloadImport).setOnClickListener { startImportFilePicker() }
+        findViewById<View>(R.id.btnAdbDeviceFiles).setOnClickListener { openAdbDeviceFiles() }
+        findViewById<View>(R.id.btnAdbWifi).setOnClickListener { openAdbWifiDialog() }
 
         findViewById<Button>(R.id.btnCancel).setOnClickListener {
             requestOperationCancelFromUi()
@@ -1292,8 +1319,8 @@ class MainActivity : AppCompatActivity() {
                     viewModel.runAdbShell(action.command, action.redirect)
                 }
             }
-            is TerminalAction.AdbPush -> viewModel.runAdbPush(action.localFile, action.remotePath)
-            is TerminalAction.AdbPull -> viewModel.runAdbPull(action.remotePath, action.localFile)
+            is TerminalAction.AdbPush -> viewModel.runAdbPush(action.localFiles, action.remotePath)
+            is TerminalAction.AdbPull -> viewModel.runAdbPull(action.remotePaths, action.localFile)
             is TerminalAction.AdbInstall -> viewModel.runAdbInstall(action.packageFile, action.options)
             is TerminalAction.AdbInstallMultiple -> viewModel.runAdbInstallMultiple(action.apkFiles, action.options)
             is TerminalAction.FastbootPlan,
@@ -1748,23 +1775,32 @@ class MainActivity : AppCompatActivity() {
 
             "push" -> {
                 if (tokens.size < 3) {
-                    invalidTerminalFormat("adb push <local-file> <remote-path>")
+                    invalidTerminalFormat("adb push <local-path>... <remote-path>")
                 } else {
-                    val localPath = resolveTerminalInputPath(tokens[1]) ?: return null
-                    val remoteArg = tokens[2]
-                    val remotePath = if (localPath.isFile && remoteArg.endsWith("/")) remoteArg + localPath.name else remoteArg
-                    TerminalAction.AdbPush(localPath, remotePath)
+                    val sources = tokens.subList(1, tokens.lastIndex)
+                    val localPaths = sources.map {
+                        resolveTerminalLocalPath(it, requireReadable = sources.size == 1) ?: return null
+                    }
+                    val remoteArg = tokens.last()
+                    val localFile = localPaths.singleOrNull()?.takeIf { it.isFile }
+                    val remotePath = if (localFile != null && remoteArg.endsWith("/")) remoteArg + localFile.name else remoteArg
+                    TerminalAction.AdbPush(localPaths, remotePath)
                 }
             }
 
             "pull" -> {
-                if (tokens.size < 2) {
-                    invalidTerminalFormat("adb pull <remote-path> [local-file]")
-                } else {
-                    val remotePath = tokens[1]
-                    val defaultName = remotePath.substringAfterLast('/').ifBlank { "adb-pull.bin" }
-                    val localFile = resolveTerminalOutputFile(tokens.getOrNull(2).orEmpty(), defaultName) ?: return null
-                    TerminalAction.AdbPull(remotePath, localFile)
+                when (tokens.size) {
+                    1 -> invalidTerminalFormat("adb pull <remote-path> [local-path]")
+                    2, 3 -> {
+                        val remotePath = tokens[1]
+                        val defaultName = remotePath.substringAfterLast('/').ifBlank { "adb-pull.bin" }
+                        val localFile = resolveTerminalOutputFile(tokens.getOrNull(2).orEmpty(), defaultName) ?: return null
+                        TerminalAction.AdbPull(listOf(remotePath), localFile)
+                    }
+                    else -> {
+                        val directory = resolveTerminalLocalPath(tokens.last(), requireReadable = false) ?: return null
+                        TerminalAction.AdbPull(tokens.subList(1, tokens.lastIndex), directory)
+                    }
                 }
             }
 
@@ -1786,7 +1822,7 @@ class MainActivity : AppCompatActivity() {
             "install-multiple" -> parseAdbInstallMultiple(tokens)
 
             "sync" -> {
-                viewModel.log("ℹ️ adb sync for directories is not implemented yet. Use adb push/adb pull for individual files.")
+                viewModel.log("ℹ️ adb sync is not implemented. Use adb push or adb pull to transfer files and folders.")
                 null
             }
 
@@ -1904,7 +1940,7 @@ class MainActivity : AppCompatActivity() {
         return bytes
     }
 
-    private fun resolveTerminalInputPath(pathText: String): File? {
+    private fun resolveTerminalLocalPath(pathText: String, requireReadable: Boolean = true): File? {
         val rawPath = pathText.trim().trim('"', '\'')
         if (rawPath.isBlank()) {
             viewModel.log("❌ Local path is not specified")
@@ -1920,7 +1956,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        return if (file.exists() && file.canRead()) {
+        return if (!requireReadable || (file.exists() && file.canRead())) {
             file
         } else {
             viewModel.log("❌ Local path was not found or is unavailable: ${file.absolutePath}")
@@ -1930,7 +1966,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resolveTerminalFile(pathText: String): File? {
-        val file = resolveTerminalInputPath(pathText) ?: return null
+        val file = resolveTerminalLocalPath(pathText) ?: return null
         return if (file.isFile) {
             file
         } else {
@@ -2180,13 +2216,17 @@ class MainActivity : AppCompatActivity() {
             viewModel.log(DiagnosticLogPolicy.Level.ERROR, getString(R.string.rev13_picker_no_document))
             return null
         }
+        retainImageReadPermission(uri)
+        val name = WorkspaceImportNaming.sanitizeImportedFileName(queryDisplayName(uri) ?: getString(R.string.rev13_unnamed_image))
+        return FirmwareSource.SafDocument(uri, name, queryFileSize(uri))
+    }
+
+    private fun retainImageReadPermission(uri: Uri) {
         runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             .onFailure {
                 viewModel.log(getString(R.string.rev24_source_transient))
                 viewModel.logFileOnly("Image document permission: ${it.javaClass.simpleName}")
             }
-        val name = WorkspaceImportNaming.sanitizeImportedFileName(queryDisplayName(uri) ?: getString(R.string.rev13_unnamed_image))
-        return FirmwareSource.SafDocument(uri, name, queryFileSize(uri))
     }
 
     private fun registerQuickImageLauncher() {
@@ -2211,6 +2251,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun registerMassBatchImageLauncher() {
+        supportFragmentManager.setFragmentResultListener(MassFlashImageMappingDialog.RESULT_KEY, this) { _, result ->
+            viewModel.addFlashQueueSources(MassFlashImageMappingDialog.readResult(result))
+        }
+        val multipleDocuments = object : ActivityResultContracts.OpenMultipleDocuments() {
+            override fun createIntent(context: Context, input: Array<String>): Intent =
+                super.createIntent(context, input)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        massBatchImageLauncher = registerForActivityResult(multipleDocuments) { uris ->
+            if (uris.isEmpty()) return@registerForActivityResult
+            uris.forEach(::retainImageReadPermission)
+            MassFlashImageMappingDialog.create(uris, FLASH_PRESET_PARTITIONS)
+                .show(supportFragmentManager, MassFlashImageMappingDialog.RESULT_KEY)
+        }
+    }
+
+    private fun startMassBatchImagePicker() {
+        runCatching { massBatchImageLauncher.launch(arrayOf("*/*")) }.onFailure {
+            viewModel.log(getString(R.string.rev11_picker_open_failed, it.message ?: it.javaClass.simpleName))
+        }
+    }
+
     private fun imageDocumentIntent() = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
         addCategory(Intent.CATEGORY_OPENABLE)
         type = "*/*"
@@ -2231,19 +2295,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun chooseImageSource(document: () -> Unit, workspace: (File) -> Unit) {
+    private fun chooseImageSource(document: () -> Unit, workspace: () -> Unit, multipleDocuments: (() -> Unit)? = null) {
+        val choices = buildList {
+            add(R.string.rev13_image_source_android to document)
+            add(R.string.rev13_image_source_workspace to workspace)
+            if (multipleDocuments != null) add(R.string.mass_flash_pick_multiple to multipleDocuments)
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.rev13_image_source_title)
-            .setItems(arrayOf(getString(R.string.rev13_image_source_android), getString(R.string.rev13_image_source_workspace))) { _, which ->
-                if (which == 0) document() else showFileSelector(workspace)
+            .setItems(choices.map { getString(it.first) }.toTypedArray()) { _, which ->
+                choices[which].second()
             }
             .setNegativeButton(R.string.cancel_upper, null)
             .show()
     }
 
-    private fun chooseQuickImageSource() = chooseImageSource(::startQuickImageDocumentPicker) {
-        viewModel.selectQuickFlashSource(FirmwareSource.WorkspaceFile(it))
-    }
+    private fun chooseQuickImageSource() = chooseImageSource(::startQuickImageDocumentPicker, workspace = {
+        showFileSelector { viewModel.selectQuickFlashSource(FirmwareSource.WorkspaceFile(it)) }
+    })
 
     private fun registerImportLauncher() {
         importFileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -2347,6 +2416,84 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private var adbDeviceFilesDialog: AdbDeviceFilesDialog? = null
+    private var adbWifiDialog: androidx.appcompat.app.AlertDialog? = null
+    private var adbWifiDraft = AdbWifiDialog.Draft()
+
+    private fun openAdbWifiDialog() {
+        if (adbWifiDialog?.isShowing == true) return
+        adbWifiDialog = AdbWifiDialog(this, viewModel, lifecycleScope, adbWifiDraft) { adbWifiDraft = it }.show()
+    }
+
+    @SuppressLint("SdCardPath") // The path belongs to the connected ADB device.
+    private fun openAdbDeviceFiles(
+        protocol: AdbProtocol? = viewModel.adbProtocol,
+        directory: String = "/sdcard"
+    ) {
+        if (protocol?.isConnected != true) {
+            Toast.makeText(this, R.string.error_no_adb, Toast.LENGTH_SHORT).show()
+            return
+        }
+        adbDeviceFilesDialog = AdbDeviceFilesDialog(
+            activity = this,
+            initialDirectory = directory,
+            list = { viewModel.listAdbDeviceFiles(protocol, it) },
+            pull = { pullAdbDeviceFile(protocol, it) },
+            send = { chooseAdbPushDocuments(protocol, it) }
+        ).also { it.show() }
+    }
+
+    private fun registerAdbPushDocumentLauncher() {
+        val documents = object : ActivityResultContracts.OpenMultipleDocuments() {
+            override fun createIntent(context: Context, input: Array<String>): Intent =
+                super.createIntent(context, input)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        adbPushDocumentLauncher = registerForActivityResult(documents) { uris ->
+            val location = viewModel.pendingAdbPushLocation
+            viewModel.pendingAdbPushLocation = null
+            if (location == null || !isAdbFilesProtocolCurrent(location.protocol)) {
+                if (uris.isNotEmpty()) showAdbFilesConnectionChanged()
+                return@registerForActivityResult
+            }
+            if (uris.isEmpty()) {
+                if (adbDeviceFilesDialog?.isShowing != true) openAdbDeviceFiles(location.protocol, location.directory)
+            } else if (viewModel.runAdbPushDocuments(uris, location)) {
+                adbDeviceFilesDialog?.dismiss()
+            }
+        }
+    }
+
+    private fun chooseAdbPushDocuments(protocol: AdbProtocol, directory: String) {
+        if (!isAdbFilesProtocolCurrent(protocol)) {
+            showAdbFilesConnectionChanged()
+            return
+        }
+        viewModel.pendingAdbPushLocation = DeviceViewModel.AdbPushLocation(protocol, directory)
+        runCatching { adbPushDocumentLauncher.launch(arrayOf("*/*")) }.onFailure {
+            viewModel.pendingAdbPushLocation = null
+            viewModel.log(DiagnosticLogPolicy.Level.ERROR, getString(R.string.rev11_picker_open_failed, it.message ?: it.javaClass.simpleName))
+        }
+    }
+
+    private fun isAdbFilesProtocolCurrent(protocol: AdbProtocol): Boolean =
+        viewModel.adbProtocol === protocol && protocol.isConnected
+
+    private fun showAdbFilesConnectionChanged() {
+        Toast.makeText(this, R.string.adb_device_files_connection_changed, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun pullAdbDeviceFile(protocol: AdbProtocol, path: String): Boolean {
+        if (!isAdbFilesProtocolCurrent(protocol)) {
+            showAdbFilesConnectionChanged()
+            return false
+        }
+        val filename = path.trimEnd('/').substringAfterLast('/').ifEmpty { "adb-pull" }
+        val destination = resolveTerminalOutputFile("", filename) ?: return false
+        return viewModel.runAdbPull(path, destination, protocol)
+    }
+
     private fun ensureWorkspaceReady(): Boolean {
         if (::workspacePath.isInitialized && workspacePath.exists()) return true
         viewModel.log(DiagnosticLogPolicy.Level.ERROR, getString(R.string.rev11_workspace_permission_needed))
@@ -2408,12 +2555,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun queryFileSize(uri: Uri): Long? = runCatching {
-        contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { cursor ->
+        val cursor = contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?: return@runCatching null
+        try {
             if (cursor.moveToFirst() && !cursor.isNull(0)) {
                 cursor.getLong(0).takeIf { it >= 0L }
             } else {
                 null
             }
+        } finally {
+            cursor.close()
         }
     }.getOrNull()
 
@@ -3541,7 +3692,6 @@ class MainActivity : AppCompatActivity() {
 
     private data class QuickFlashSlotTargetInfo(
         val hasSlots: Boolean?,
-        val currentSlot: String?,
         val slotCount: Int
     )
 
@@ -3576,10 +3726,7 @@ class MainActivity : AppCompatActivity() {
         controls.forEachIndexed { index, button -> button.setOnClickListener { selectSection(index) } }
         selectSection(selectedFastbootSection)
 
-        val namedPartitions = listOf(
-            "boot", "init_boot", "recovery", "vendor_boot", "dtbo",
-            "vbmeta", "system", "vendor", "product", "super"
-        )
+        val namedPartitions = FLASH_PRESET_PARTITIONS
         val labels = namedPartitions + getString(R.string.flash_rev7_partition_manual)
 
         fun partitionSelector(spinnerId: Int, manualId: Int, root: View = window.decorView, onChanged: () -> Unit = {}): () -> String? {
@@ -3611,18 +3758,22 @@ class MainActivity : AppCompatActivity() {
 
         var onQuickPartitionChanged: () -> Unit = {}
         val getQuickPartition = partitionSelector(R.id.spinQuickPartition, R.id.edQuickManualPartition) { onQuickPartitionChanged() }
-        massQueueUi = MassFlashQueueUi(this, viewModel::moveFlashQueueDraftItem, viewModel::removeFlashQueueDraftItem)
+        massQueueUi = MassFlashQueueUi(
+            this, viewModel::moveFlashQueueDraftItem, viewModel::removeFlashQueueDraftItem,
+            viewModel::setFlashQueueSlot
+        )
         val getMassPartition = partitionSelector(R.id.spinMassPartition, R.id.edMassManualPartition, massQueueUi.header)
         massQueueUi.restoreFormState(restoredMassQueueState)
         restoredMassQueueState = null
         val slotSpinner = findViewById<Spinner>(R.id.spinQuickSlot)
-        val slotNames = listOf(
-            getString(R.string.flash_rev7_slot_current),
-            getString(R.string.flash_rev7_slot_other),
-            getString(R.string.flash_rev7_slot_a),
-            getString(R.string.flash_rev7_slot_b),
-            getString(R.string.flash_rev7_slot_all)
+        val slotChoices = listOf(
+            null to R.string.flash_rev7_slot_current,
+            "other" to R.string.flash_rev7_slot_other,
+            "a" to R.string.flash_rev7_slot_a,
+            "b" to R.string.flash_rev7_slot_b,
+            "all" to R.string.flash_rev7_slot_all
         )
+        val slotNames = slotChoices.map { (_, label) -> getString(label) }
         slotSpinner.adapter = ArrayAdapter(this, R.layout.item_fastboot_selection, slotNames).apply {
             setDropDownViewResource(R.layout.item_fastboot_dropdown)
         }
@@ -3636,12 +3787,12 @@ class MainActivity : AppCompatActivity() {
                 targetLabel.setText(R.string.flash_rev7_target_unselected)
                 return
             }
-            val slot = if (quickFlashPartitionAlreadySuffixed(partition)) {
-                getString(R.string.flash_rev7_slot_current)
+            if (FlashOperationDraftPolicy.isExplicitSlotTarget(partition)) {
+                targetLabel.text = partition
             } else {
-                slotNames[slotSpinner.selectedItemPosition.coerceIn(slotNames.indices)]
+                val slot = slotNames[slotSpinner.selectedItemPosition.coerceIn(slotNames.indices)]
+                targetLabel.text = getString(R.string.flash_rev7_target_display, partition, slot)
             }
-            targetLabel.text = getString(R.string.flash_rev7_target_display, partition, slot)
         }
         onQuickPartitionChanged = { updateTargetLabel() }
         updateTargetLabel()
@@ -3669,26 +3820,9 @@ class MainActivity : AppCompatActivity() {
                 Toast.makeText(this, R.string.flash_rev7_no_file_error, Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
-            val currentSlot = normalizeQuickFlashSlot(
-                viewModel.currentFastbootPartitionInventory()?.currentSlot
-                    ?: viewModel.currentFastbootDiagnostics()?.currentSlot
-            )
-            val chosenSlot = if (quickFlashPartitionAlreadySuffixed(partition)) {
-                null
-            } else when (slotSpinner.selectedItemPosition) {
-                1 -> when (currentSlot) {
-                    "a" -> "b"
-                    "b" -> "a"
-                    else -> {
-                        Toast.makeText(this, R.string.flash_rev7_slot_unknown, Toast.LENGTH_SHORT).show()
-                        return@setOnClickListener
-                    }
-                }
-                2 -> "a"
-                3 -> "b"
-                4 -> "all"
-                else -> null
-            }
+            val explicitTarget = FlashOperationDraftPolicy.isExplicitSlotTarget(partition)
+            val (slot, slotLabel) = slotChoices.getOrElse(slotSpinner.selectedItemPosition) { slotChoices.first() }
+            val chosenSlot = slot.takeUnless { explicitTarget }
             val startQuickFlash = {
                 // Re-check the source after the modal review; the executor
                 // retains its own independent source/size validation.
@@ -3703,8 +3837,11 @@ class MainActivity : AppCompatActivity() {
                     ProfessionalOperationReviewPolicy.Action.QUICK_FLASH, listOf(partition), chosenSlot
                 )
             ) {
-                val displayedSlot = if (quickFlashPartitionAlreadySuffixed(partition)) null
-                    else chosenSlot ?: getString(R.string.pro_review_slot_default)
+                val displayedSlot = when {
+                    explicitTarget -> null
+                    chosenSlot == null -> getString(R.string.pro_review_slot_default)
+                    else -> getString(slotLabel)
+                }
                 val summary = ProfessionalOperationReviewPolicy.displayTarget(partition, displayedSlot) +
                     "\n" + selection.displayName + " (" + selection.expectedSizeBytes + " bytes)"
                 reviewProfessionalOperation(
@@ -3717,6 +3854,7 @@ class MainActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnQuickReboot).setOnClickListener { showRebootMenu() }
 
         val queueExecute = massQueueUi.execute
+        var massFlashReviewJob: Job? = null
         fun renderQueue(draft: FlashOperationDraft) = massQueueUi.render(
             draft, viewModel.queueSourceState.value ?: QueueSourceState()
         )
@@ -3724,8 +3862,18 @@ class MainActivity : AppCompatActivity() {
         viewModel.flashOperationDraft.observe(this) { renderQueue(it) }
         viewModel.queueSourceState.observe(this) { renderQueue(viewModel.currentFlashOperationDraft()) }
         massQueueUi.header.findViewById<View>(R.id.btnMassSelectImage).setOnClickListener {
-            val partition = getMassPartition() ?: return@setOnClickListener
-            chooseImageSource({ startMassImageDocumentPicker(partition) }) { file -> viewModel.addFlashQueueFile(partition, file) }
+            chooseImageSource(
+                document = { getMassPartition()?.let(::startMassImageDocumentPicker) },
+                workspace = {
+                    getMassPartition()?.let { partition ->
+                        showFileSelector { file -> viewModel.addFlashQueueFile(partition, file) }
+                    }
+                },
+                multipleDocuments = ::startMassBatchImagePicker
+            )
+        }
+        massQueueUi.preview.setOnClickListener {
+            showMassFlashQueuePreview(viewModel.currentFlashOperationDraft())
         }
         queueExecute.setOnClickListener {
             val draft = viewModel.currentFlashOperationDraft()
@@ -3744,17 +3892,28 @@ class MainActivity : AppCompatActivity() {
                         ProfessionalOperationReviewPolicy.Action.MASS_FLASH, partitions
                     )
                 ) {
-                    val shown = draft.items.take(12).joinToString("\n") {
-                        it.partition + " ← " + it.displayName
+                    if (massFlashReviewJob?.isActive == true) return@setOnClickListener
+                    massFlashReviewJob = lifecycleScope.launch {
+                        if (draft.slot != null && viewModel.fastbootProtocol?.isConnected == true) {
+                            Toast.makeText(this@MainActivity, R.string.mass_flash_preview_loading, Toast.LENGTH_SHORT).show()
+                        }
+                        val plan = viewModel.previewFlashQueueDraft(draft)
+                        if (viewModel.currentFlashOperationDraft() != draft) {
+                            Toast.makeText(this@MainActivity, R.string.pro_review_source_changed, Toast.LENGTH_SHORT).show()
+                            return@launch
+                        }
+                        val shown = massQueueUi.planRows(plan).take(12).joinToString("\n")
+                        val remaining = plan.size - 12
+                        val more = if (remaining > 0) {
+                            "\n" + resources.getQuantityString(R.plurals.pro_review_additional_targets, remaining, remaining)
+                        } else ""
+                        reviewProfessionalOperation(
+                            ProfessionalOperationReviewPolicy.Action.MASS_FLASH,
+                            resources.getQuantityString(R.plurals.pro_review_queue_count, plan.size, plan.size) +
+                                "\n" + massQueueUi.slotLabel(draft.slot) + "\n" + shown + more,
+                            runQueue,
+                        )
                     }
-                    val more = if (draft.items.size > 12) {
-                        "\n" + resources.getQuantityString(R.plurals.pro_review_additional_targets, draft.items.size - 12, draft.items.size - 12)
-                    } else ""
-                    reviewProfessionalOperation(
-                        ProfessionalOperationReviewPolicy.Action.MASS_FLASH,
-                        resources.getQuantityString(R.plurals.pro_review_queue_count, draft.items.size, draft.items.size) + "\n" + shown + more,
-                        runQueue,
-                    )
                 } else {
                     runQueue()
                 }
@@ -3832,6 +3991,32 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun showMassFlashQueuePreview(draft: FlashOperationDraft) {
+        if (draft.isEmpty) return
+        val adapter = ArrayAdapter<String>(this, android.R.layout.simple_list_item_1)
+        adapter.add(getString(R.string.mass_flash_preview_loading))
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.mass_flash_preview_title)
+            .setAdapter(adapter, null)
+            .setNegativeButton(R.string.close_upper, null)
+            .show()
+        massFlashPreviewDialog = dialog
+        val loadJob = lifecycleScope.launch {
+            val plan = viewModel.previewFlashQueueDraft(draft)
+            val rows = if (viewModel.currentFlashOperationDraft() == draft) {
+                listOf(massQueueUi.slotLabel(draft.slot)) + massQueueUi.planRows(plan)
+            } else listOf(getString(R.string.pro_review_source_changed))
+            adapter.setNotifyOnChange(false)
+            adapter.clear()
+            adapter.addAll(rows)
+            adapter.notifyDataSetChanged()
+        }
+        dialog.setOnDismissListener {
+            loadJob.cancel()
+            if (massFlashPreviewDialog === dialog) massFlashPreviewDialog = null
+        }
+    }
+
     private fun startDirectFlash(partition: String) {
         chooseQuickFlashSlotTarget(partition) { slot ->
             showFileSelector { file ->
@@ -3843,7 +4028,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun chooseQuickFlashSlotTarget(partition: String, onSlotChosen: (String?) -> Unit) {
         val normalized = partition.trim().lowercase(Locale.US)
-        if (normalized.isBlank() || quickFlashPartitionAlreadySuffixed(normalized)) {
+        if (normalized.isBlank() || FlashOperationDraftPolicy.isExplicitSlotTarget(normalized)) {
             onSlotChosen(null)
             return
         }
@@ -3858,22 +4043,11 @@ class MainActivity : AppCompatActivity() {
 
         val snapshotInfo = quickFlashSlotInfoFromSnapshot(normalized)
         when (snapshotInfo.hasSlots) {
-            true -> showQuickFlashSlotDialog(normalized, snapshotInfo, onSlotChosen)
+            true -> showQuickFlashSlotDialog(normalized, snapshotInfo.slotCount, onSlotChosen)
             false -> onSlotChosen(null)
             null -> probeQuickFlashSlotTarget(normalized, snapshotInfo, onSlotChosen)
         }
     }
-
-    private fun quickFlashPartitionAlreadySuffixed(partition: String): Boolean {
-        val name = partition.substringBefore(':').lowercase(Locale.US)
-        return name.endsWith("_a") || name.endsWith("_b")
-    }
-
-    private fun normalizeQuickFlashSlot(raw: String?): String? =
-        raw?.trim()
-            ?.removePrefix("_")
-            ?.lowercase(Locale.US)
-            ?.takeIf { it.length == 1 && it[0] in 'a'..'z' }
 
     private fun quickFlashBaseName(partition: String): String =
         FastbootPartitionInventory.baseName(partition.substringBefore(':').trim().lowercase(Locale.US))
@@ -3882,14 +4056,12 @@ class MainActivity : AppCompatActivity() {
         val base = quickFlashBaseName(partition)
         val inventory = viewModel.currentFastbootPartitionInventory()
         val diagnostics = viewModel.currentFastbootDiagnostics()
-        val currentSlot = normalizeQuickFlashSlot(inventory?.currentSlot)
-            ?: normalizeQuickFlashSlot(diagnostics?.currentSlot)
         val slotCount = diagnostics?.slotCount?.trim()?.toIntOrNull()
             ?: inventory?.variables?.get("slot-count")?.trim()?.toIntOrNull()
             ?: 0
 
         if (inventory?.topology == FastbootPartitionInventory.SlotTopology.LEGACY_A_ONLY) {
-            return QuickFlashSlotTargetInfo(hasSlots = false, currentSlot = currentSlot, slotCount = slotCount)
+            return QuickFlashSlotTargetInfo(hasSlots = false, slotCount = slotCount)
         }
 
         val familyHasSlot = inventory?.slotFamilies
@@ -3905,7 +4077,6 @@ class MainActivity : AppCompatActivity() {
         val hasSlots = familyHasSlot ?: entryHasSlot
         return QuickFlashSlotTargetInfo(
             hasSlots = hasSlots,
-            currentSlot = currentSlot,
             slotCount = slotCount
         )
     }
@@ -3925,22 +4096,14 @@ class MainActivity : AppCompatActivity() {
                         it.getVar("has-slot:$base")?.trim()?.equals("yes", ignoreCase = true)
                     }.getOrNull()
                 }
-            val probedCurrentSlot = proto
-                ?.takeIf { it.isConnected }
-                ?.let { runCatching { normalizeQuickFlashSlot(it.getVar("current-slot")) }.getOrNull() }
-            val probedSlotCount = proto
-                ?.takeIf { it.isConnected }
-                ?.let { runCatching { it.getVar("slot-count")?.trim()?.toIntOrNull() }.getOrNull() }
-                ?: 0
+            val slotCount = if (probedHasSlots == true && proto.isConnected) {
+                runCatching { proto.getVar("slot-count")?.trim()?.toIntOrNull() }.getOrNull()
+                    ?.takeIf { it > 0 } ?: snapshotInfo.slotCount
+            } else snapshotInfo.slotCount
 
             withContext(Dispatchers.Main) {
-                val info = QuickFlashSlotTargetInfo(
-                    hasSlots = probedHasSlots,
-                    currentSlot = probedCurrentSlot ?: snapshotInfo.currentSlot,
-                    slotCount = if (probedSlotCount > 0) probedSlotCount else snapshotInfo.slotCount
-                )
-                if (info.hasSlots == true) {
-                    showQuickFlashSlotDialog(partition, info, onSlotChosen)
+                if (probedHasSlots == true) {
+                    showQuickFlashSlotDialog(partition, slotCount, onSlotChosen)
                 } else {
                     onSlotChosen(null)
                 }
@@ -3950,29 +4113,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun showQuickFlashSlotDialog(
         partition: String,
-        info: QuickFlashSlotTargetInfo,
+        slotCount: Int,
         onSlotChosen: (String?) -> Unit
     ) {
-        val current = info.currentSlot
-        val currentTarget = current?.let { "${quickFlashBaseName(partition)}_$it" } ?: "${quickFlashBaseName(partition)}_<current>"
-        val lastSlot = if (info.slotCount > 0) {
-            ('a'.code + (info.slotCount - 1).coerceAtLeast(0)).toChar()
-        } else {
-            'b'
-        }
-        val allLabel = if (info.slotCount > 1) {
+        val allLabel = if (slotCount > 1) {
+            val lastSlot = ('a'.code + slotCount - 1).toChar()
             getString(R.string.quick_flash_all_slots_range, lastSlot.toString())
         } else {
             getString(R.string.quick_flash_all_slots)
         }
-        val labels = arrayOf(
-            getString(
-                R.string.quick_flash_active_slot_target,
-                current ?: getString(R.string.quick_flash_current_slot),
-                currentTarget,
-            ),
-            allLabel,
-        )
         // Do not mix AlertDialog.setMessage() with setItems() here: on some
         // Android/Material theme combinations the message view can consume the
         // dialog content area and leave the slot choices invisible. Keep the
@@ -3992,7 +4141,7 @@ class MainActivity : AppCompatActivity() {
             null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle
         ).apply {
-            text = labels[0]
+            setText(R.string.quick_flash_active_slot_target)
             isAllCaps = false
             minHeight = dp(48)
             setPadding(dp(16), dp(8), dp(16), dp(8))
@@ -4002,7 +4151,7 @@ class MainActivity : AppCompatActivity() {
             null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle
         ).apply {
-            text = labels[1]
+            text = allLabel
             isAllCaps = false
             minHeight = dp(48)
             setPadding(dp(16), dp(8), dp(16), dp(8))
@@ -4024,7 +4173,7 @@ class MainActivity : AppCompatActivity() {
 
         activeSlotButton.setOnClickListener {
             dialog.dismiss()
-            onSlotChosen(current)
+            onSlotChosen(null)
         }
         allSlotsButton.setOnClickListener {
             dialog.dismiss()
@@ -4630,8 +4779,9 @@ class MainActivity : AppCompatActivity() {
                 append("\n")
                 append(UsbScanDiagnostics.explain(usbScanEvidence(devices, candidates)))
                 devices.forEachIndexed { index, device ->
+                    val entryNumber: Int = index + 1
                     append("\n\n")
-                    append(getString(R.string.shell_usb_device_entry, index + 1, device.vendorId, device.productId))
+                    append(getString(R.string.shell_usb_device_entry, entryNumber, device.vendorId, device.productId))
                     append("\n")
                     append(getString(R.string.shell_usb_permission,
                         if (runCatching { usbManager.hasPermission(device) }.getOrDefault(false))
@@ -4805,6 +4955,7 @@ class MainActivity : AppCompatActivity() {
         if (displaySteps.isEmpty()) {
             tvOperationStepQueue.text = ""
             tvOperationStepQueue.visibility = View.GONE
+            btnOperationFullSteps.visibility = View.GONE
             updateOperationCenter(viewModel.logSnapshot())
             return
         }
@@ -4825,26 +4976,7 @@ class MainActivity : AppCompatActivity() {
 
         val body = buildString {
             visibleSteps.forEach { step ->
-                val icon = when (step.status) {
-                    DeviceViewModel.OperationStepStatus.PENDING -> "·"
-                    DeviceViewModel.OperationStepStatus.RUNNING -> "▶"
-                    DeviceViewModel.OperationStepStatus.OK -> "✓"
-                    DeviceViewModel.OperationStepStatus.FAILED -> "✕"
-                    DeviceViewModel.OperationStepStatus.SKIPPED -> "↷"
-                    DeviceViewModel.OperationStepStatus.INFO -> "i"
-                }
-                append(icon)
-                append(' ')
-                append(step.index)
-                append('/')
-                append(step.total)
-                append(' ')
-                append(step.title)
-                step.subtitle?.takeIf { it.isNotBlank() }?.let {
-                    append(" — ")
-                    append(it)
-                }
-                append('\n')
+                appendLine(formatOperationStep(step))
             }
             if (hiddenCount > 0) {
                 append(resources.getQuantityString(R.plurals.layout_operation_steps_more, hiddenCount, hiddenCount))
@@ -4853,6 +4985,7 @@ class MainActivity : AppCompatActivity() {
 
         tvOperationStepQueue.text = body
         tvOperationStepQueue.visibility = View.VISIBLE
+        btnOperationFullSteps.visibility = if (hiddenCount > 0) View.VISIBLE else View.GONE
         val hasFailed = displaySteps.any { it.status == DeviceViewModel.OperationStepStatus.FAILED }
         val hasRunning = displaySteps.any { it.status == DeviceViewModel.OperationStepStatus.RUNNING }
         val allOk = displaySteps.isNotEmpty() && displaySteps.all {
@@ -4867,6 +5000,19 @@ class MainActivity : AppCompatActivity() {
         }
         tvOperationStepQueue.setTextColor(getColor(colorRes))
         updateOperationCenter(viewModel.logSnapshot())
+    }
+
+    private fun formatOperationStep(step: DeviceViewModel.OperationStep): String {
+        val icon = when (step.status) {
+            DeviceViewModel.OperationStepStatus.PENDING -> "·"
+            DeviceViewModel.OperationStepStatus.RUNNING -> "▶"
+            DeviceViewModel.OperationStepStatus.OK -> "✓"
+            DeviceViewModel.OperationStepStatus.FAILED -> "✕"
+            DeviceViewModel.OperationStepStatus.SKIPPED -> "↷"
+            DeviceViewModel.OperationStepStatus.INFO -> "i"
+        }
+        val detail = step.subtitle?.takeIf { it.isNotBlank() }?.let { " — $it" }.orEmpty()
+        return "$icon ${step.index}/${step.total} ${step.title}$detail"
     }
 
     private fun renderTerminalOperationStatus(
@@ -4910,6 +5056,7 @@ class MainActivity : AppCompatActivity() {
         if (!operationStepsVisibleForCurrentRun) {
             tvOperationStepQueue.text = ""
             tvOperationStepQueue.visibility = View.GONE
+            btnOperationFullSteps.visibility = View.GONE
         }
         val focusStep = steps.firstOrNull { it.status == DeviceViewModel.OperationStepStatus.RUNNING }
             ?: steps.firstOrNull { it.status == DeviceViewModel.OperationStepStatus.FAILED }
@@ -5351,8 +5498,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        massFlashPreviewDialog?.dismiss()
+        massFlashPreviewDialog = null
+        adbWifiDialog?.dismiss()
+        adbWifiDialog = null
+        adbDeviceFilesDialog?.dismiss()
+        adbDeviceFilesDialog = null
         operationCenterDialog?.dismiss()
         operationCenterDialog = null
+        operationStepsDialog?.dismiss()
+        operationStepsDialog = null
         importDialog?.dismiss()
         importDialog = null
         localOverwriteDialog?.dismiss()
@@ -5393,6 +5548,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val PARTITION_NAME_PATTERN = Regex("^[A-Za-z0-9._:-]+$")
+    private val FLASH_PRESET_PARTITIONS = listOf(
+        "boot", "init_boot", "recovery", "vendor_boot", "dtbo",
+        "vbmeta", "system", "vendor", "product", "super"
+    )
 
     companion object {
         private const val GITHUB_URL = "https://github.com/Ncorror/NekoFlash-2.0"
@@ -5418,6 +5577,8 @@ class MainActivity : AppCompatActivity() {
         private const val STATE_SIDELOAD_URI = "sideload_source_uri"
         private const val STATE_SIDELOAD_NAME = "sideload_source_name"
         private const val STATE_SIDELOAD_SIZE = "sideload_source_size"
+        private const val STATE_ADB_WIFI_DRAFT = "adb_wifi_draft"
+        private const val STATE_ADB_WIFI_OPEN = "adb_wifi_open"
         private const val STATE_SELECTED_WINDOW = "state_selected_window"
         private const val STATE_OPERATION_SESSION_ID = "state_operation_session_id"
         private const val STATE_OPERATION_STEPS_VISIBLE = "state_operation_steps_visible"

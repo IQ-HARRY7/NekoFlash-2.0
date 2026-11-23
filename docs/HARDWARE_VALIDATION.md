@@ -2,7 +2,7 @@
 
 **Hardware baseline:** `v6.0.0-alpha11`, accepted 13 November 2026. The marble follow-up used signed `v6.0.0-alpha15` on 22 November 2026.
 
-This document is the current verdict. Detailed chronological FAIL → fix → PASS evidence is retained in the [EN physical ledger](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-EN.md) and [RU ledger](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-RU.md).
+This document records physical results for the builds and device pairs listed below. The [current status](STATUS.md#development-snapshot) records automated verification of later development changes. The [EN physical ledger](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-EN.md) and [RU ledger](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-RU.md) retain the FAIL → fix → PASS chronology.
 
 ## Qualified results
 
