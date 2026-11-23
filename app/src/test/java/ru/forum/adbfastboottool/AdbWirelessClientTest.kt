@@ -1,0 +1,118 @@
+package ru.forum.adbfastboottool
+
+import io.github.rhythmcache.adb.crypto.X509Generator
+import io.github.rhythmcache.adb.pairing.ConnectionRole
+import io.github.rhythmcache.adb.pairing.PairingConnection
+import io.github.rhythmcache.adb.pairing.PairingIdentity
+import io.github.rhythmcache.adb.pairing.PairingTlsSocket
+import io.github.rhythmcache.adb.pairing.PeerInfo
+import io.github.rhythmcache.adb.pairing.PeerInfoType
+import java.io.DataInputStream
+import java.io.OutputStream
+import java.net.InetAddress
+import java.net.ServerSocket
+import java.net.Socket
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.rules.TemporaryFolder
+
+class AdbWirelessClientTest {
+    @get:Rule val temporary = TemporaryFolder()
+
+    @Test fun pairsAndOpensAdbShellOverTls() {
+        val hostKeys = AdbKeyStore(temporary.newFolder("host")) {}
+        val daemonKeys = AdbKeyStore(temporary.newFolder("daemon")) {}.getOrCreateKeyPair()
+        val daemonIdentity = PairingIdentity(
+            daemonKeys,
+            X509Generator.toPem(X509Generator.generate(daemonKeys)),
+            X509Generator.privateKeyToPem(daemonKeys.private)
+        )
+        val host = "127.0.0.1"
+        val address = InetAddress.getByName(host)
+        val worker = Executors.newSingleThreadExecutor()
+        try {
+            ServerSocket(0, 1, address).use { server ->
+                val device = worker.submit<PeerInfo> {
+                    server.acceptWithTimeout().use { socket ->
+                        PairingConnection.run(
+                            socket, ConnectionRole.SERVER, "012345".toByteArray(),
+                            PeerInfo(PeerInfoType.ADB_DEVICE_GUID, "adb-test-device".toByteArray()), daemonIdentity
+                        ).getOrThrow().peerInfo
+                    }
+                }
+                assertEquals("adb-test-device", AdbWirelessClient(hostKeys).pair(host, server.localPort, "012345"))
+                val peer = device.get(10, TimeUnit.SECONDS)
+                assertEquals(PeerInfoType.ADB_RSA_PUB_KEY, peer.type)
+                val expectedKey = hostKeys.publicKeyPayload()
+                assertArrayEquals(expectedKey, peer.data.copyOf(expectedKey.size))
+            }
+            ServerSocket(0, 1, address).use { server ->
+                val device = worker.submit {
+                    server.acceptWithTimeout().use { socket ->
+                        val plain = DataInputStream(socket.getInputStream())
+                        assertEquals("CNXN", plain.readPacket().command)
+                        socket.getOutputStream().sendPacket("STLS", arg0 = 0x01000000)
+                        assertEquals("STLS", plain.readPacket().command)
+                        val tls = PairingTlsSocket.connectAsServer(socket, daemonIdentity.certPem, daemonIdentity.privateKeyPem)
+                        try {
+                            val input = DataInputStream(tls.inputStream())
+                            val output = tls.outputStream()
+                            output.sendPacket("CNXN", 0x01000001, 4096, "device::\u0000")
+                            val open = input.readPacket()
+                            assertEquals("OPEN", open.command)
+                            assertEquals("shell:echo wifi\u0000", open.payload)
+                            output.sendPacket("OKAY", 1, open.arg0)
+                            output.sendPacket("WRTE", 1, open.arg0, "wifi\n")
+                            assertEquals("OKAY", input.readPacket().command)
+                            output.sendPacket("CLSE", 1, open.arg0)
+                            assertEquals("CLSE", input.readPacket().command)
+                        } finally {
+                            tls.close()
+                        }
+                    }
+                }
+                val logs = CopyOnWriteArrayList<String>()
+                val protocol = AdbProtocol(hostKeys, host, server.localPort, { logs.add(it) }, rawShellLogsDir = temporary.newFolder("logs"))
+                try {
+                    assertTrue(logs.joinToString("\n"), protocol.connect())
+                    assertEquals(AdbProtocol.PeerMode.DEVICE, protocol.peerMode)
+                    assertEquals("wifi\n", protocol.captureShellCommand("echo wifi").stdout)
+                    device.get(10, TimeUnit.SECONDS)
+                } finally {
+                    protocol.disconnect()
+                }
+            }
+        } finally {
+            worker.shutdownNow()
+        }
+    }
+
+    private fun ServerSocket.acceptWithTimeout(): Socket = accept().apply { soTimeout = 10_000 }
+
+    private data class Packet(val command: String, val arg0: Int, val payload: String)
+
+    private fun DataInputStream.readPacket(): Packet {
+        val bytes = ByteArray(24).also(::readFully)
+        val header = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val arg0 = header.getInt(4)
+        val payload = ByteArray(header.getInt(12)).also(::readFully).toString(Charsets.UTF_8)
+        return Packet(String(bytes, 0, 4, Charsets.US_ASCII), arg0, payload)
+    }
+
+    private fun OutputStream.sendPacket(command: String, arg0: Int, arg1: Int = 0, body: String = "") {
+        val payload = body.toByteArray()
+        val code = ByteBuffer.wrap(command.toByteArray()).order(ByteOrder.LITTLE_ENDIAN).int
+        write(ByteBuffer.allocate(24).order(ByteOrder.LITTLE_ENDIAN)
+            .putInt(code).putInt(arg0).putInt(arg1).putInt(payload.size).putInt(0).putInt(code.inv()).array())
+        write(payload)
+        flush()
+    }
+}

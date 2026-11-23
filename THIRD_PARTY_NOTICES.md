@@ -41,6 +41,7 @@ Direct dependencies declared by the current project include:
 - AndroidX Lifecycle ViewModel KTX / SavedState / LiveData KTX / Runtime KTX `2.11.0` — Apache License 2.0;
 - AndroidX Palette KTX `1.0.0` — Apache License 2.0;
 - Material Components for Android `1.14.0` — Apache License 2.0;
+- adb-kt `1.0.13` for Android Wireless debugging — Apache License 2.0;
 - Kotlin runtime used by Kotlin plugin `2.3.21` — Apache License 2.0;
 - kotlinx-coroutines-android `1.11.0` — Apache License 2.0;
 - Gradle Wrapper files included in the source tree — Apache License 2.0.
@@ -53,6 +54,10 @@ Upstream license references:
 - Material Components: https://github.com/material-components/material-components-android/blob/master/LICENSE
 - Kotlin: https://github.com/JetBrains/kotlin/blob/master/license/LICENSE.txt
 - kotlinx.coroutines: https://github.com/Kotlin/kotlinx.coroutines/blob/master/LICENSE.txt
+- adb-kt: https://github.com/rhythmcache/adb-kt/blob/1.0.13/LICENSE
+- spake2-kt: https://github.com/rhythmcache/spake2-kt/blob/v1.0.2/LICENSE
+- Bouncy Castle: https://www.bouncycastle.org/licence.html
+- Okio: https://github.com/square/okio/blob/master/LICENSE.txt
 - Apache License 2.0: https://www.apache.org/licenses/LICENSE-2.0.txt
 
 ## Bundled filesystem executables (distributed in the APK)

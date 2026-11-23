@@ -23,6 +23,10 @@ android {
     sourceSets.main.jniLibs.srcDir(rootProject.file('build/filesystem-tools/jniLibs'))
     sourceSets.main.assets.srcDir(rootProject.file('build/filesystem-tools/assets'))
     packaging {
+        resources {
+            // Bouncy Castle modules include byte-identical copies of this license.
+            pickFirsts.add('META-INF/LICENSE.md')
+        }
         jniLibs {
             // PIE generators must be executable from PackageManager's read-only nativeLibraryDir.
             useLegacyPackaging = true
@@ -137,6 +141,7 @@ dependencies {
     implementation('androidx.activity:activity-ktx:1.13.0')
     implementation('androidx.recyclerview:recyclerview:1.4.0')
     implementation('com.google.android.material:material:1.14.0')
+    implementation('com.github.rhythmcache:adb-kt:1.0.13')
 
     // ViewModel + LiveData
     implementation('androidx.lifecycle:lifecycle-viewmodel-ktx:2.11.0')

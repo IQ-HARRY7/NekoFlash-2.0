@@ -26,6 +26,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.text.SimpleDateFormat
@@ -37,7 +38,7 @@ import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 /**
- * Lifecycle-владелец USB-сессии и пользовательских операций NekoFlash.
+ * Lifecycle-владелец сеанса подключения и пользовательских операций NekoFlash.
  *
  * ViewModel сериализует подключение ADB/Fastboot, хранит наблюдаемое состояние экранов
  * и публикует прогресс. Mutation-команды передаются напрямую реальному protocol-слою;
@@ -334,6 +335,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private var activeTransportSessionId: String? = null
     private val transportSessionSequence = AtomicLong(0L)
     private val adbKeyDir: File = File(application.filesDir, "adbkeys")
+    private val wirelessAdbKeys = AdbKeyStore(File(application.filesDir, "adb-wifi-keys")) { logFileOnly(it) }
 
     @Volatile
     var fastbootProtocol: FastbootProtocol? = null
@@ -669,6 +671,59 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    internal suspend fun pairWirelessAdb(host: String, port: Int, code: String) = withContext(Dispatchers.IO) {
+        AdbWirelessClient(wirelessAdbKeys).pair(host, port, code)
+    }
+
+    internal fun connectWirelessAdb(host: String, port: Int) {
+        if (transportRestartRequired.get()) {
+            log(text(R.string.adb_wifi_restart_transport))
+            _connectionState.postValue(ConnectionState.ERROR)
+            return
+        }
+        synchronized(operationLaunchLock) {
+            if (viewModelCleared.get()) return
+            val generation = connectionGeneration.incrementAndGet()
+            val endpoint = if (':' in host) "[$host]:$port" else "$host:$port"
+            pendingUsbTargetKey = null
+            _adbAndroidRelease.postValue(null)
+            _fastbootDiagnostics.postValue(null)
+            _fastbootPartitionInventory.postValue(null)
+            _adbPeerMode.postValue(null)
+            _connectionState.postValue(ConnectionState.CONNECTING)
+
+            val transitionJob = transportScope.launch(start = CoroutineStart.LAZY) {
+                transportTransitionMutex.withLock {
+                    if (viewModelCleared.get() || generation != connectionGeneration.get()) return@withLock
+                    if (!shutdownCurrentTransportsSafely("new Wi-Fi ADB generation=$generation")) return@withLock
+                    if (viewModelCleared.get() || generation != connectionGeneration.get()) return@withLock
+
+                    publishDisconnectedState("switch to Wi-Fi ADB")
+                    connectedDeviceInfo = "Mode: ADB | Device: ${text(R.string.adb_wifi_endpoint, endpoint)}"
+                    val sessionId = "wifi-adb-${transportSessionSequence.incrementAndGet()}"
+                    activeTransportSessionId = sessionId
+                    _transportSessionId.postValue(sessionId)
+                    diagnosticSessionTracker.recordTransportSession(sessionId, "ADB", connectedDeviceInfo)
+                    _connectionInfo.postValue(connectedDeviceInfo)
+                    _connectionState.postValue(ConnectionState.CONNECTING)
+                    connectAdbLocked(
+                        AdbProtocol(
+                            keyStore = wirelessAdbKeys,
+                            host = host,
+                            port = port,
+                            rawShellLogsDir = File(workspaceRoot ?: getApplication<Application>().filesDir, "logs"),
+                            onLog = { msg -> logInternal(msg, declaredLevel = null, protocol = true) },
+                            onProgress = ::postAdbProgress
+                        ),
+                        generation
+                    )
+                }
+            }
+            connectionJob = transitionJob
+            transitionJob.start()
+        }
+    }
+
     private suspend fun connectCandidateLocked(
         usbManager: UsbManager,
         candidate: UsbDeviceInspector.Candidate,
@@ -750,84 +805,90 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 // No rotation, sanitization or automatic pruning of raw bytes.
                 rawShellLogsDir = File(workspaceRoot ?: getApplication<Application>().filesDir, "logs"),
                 onLog = { msg -> logInternal(msg, declaredLevel = null, protocol = true) },
-                onProgress = { percent, detail ->
-                    val currentProgress = operationProgressSnapshot
-                    postOperationProgress(
-                        OperationProgress(
-                            title = currentProgress?.title ?: text(R.string.flash_progress_writing),
-                            percent = percent,
-                            detail = detail
-                        )
-                    )
-                },
+                onProgress = ::postAdbProgress,
                 preferredInterfaceIndex = candidate.interfaceIndex
             )
-            proto.onTransportFailure = { code, message ->
-                if (!viewModelCleared.get() && generation == connectionGeneration.get()) {
-                    diagnosticSessionTracker.recordTermination("ADB_READER_${code.name}")
-                    _adbAndroidRelease.postValue(null)
-                    diagnosticSessionTracker.recordMilestone("adb.reader.failure", 0L)
-                    persistSessionSummary()
-                    _connectionState.postValue(ConnectionState.ERROR)
-                    log("⛔ ADB transport stopped [${code.name}]: $message. Auto-retry is forbidden until manual reconnection.")
-                }
-            }
-            var published = false
-            try {
-                val connectStartedNs = System.nanoTime()
-                if (!proto.connect()) {
-                    diagnosticSessionTracker.recordMilestone("adb.connect.failed", (System.nanoTime() - connectStartedNs) / 1_000_000L)
-                    if (generation == connectionGeneration.get()) _connectionState.postValue(ConnectionState.ERROR)
-                    return
-                }
-                diagnosticSessionTracker.recordMilestone("adb.connect", (System.nanoTime() - connectStartedNs) / 1_000_000L)
-                if (viewModelCleared.get() || generation != connectionGeneration.get()) return
+            connectAdbLocked(proto, generation)
+        }
+    }
 
-                adbProtocol = proto
-                published = true
-                _fastbootDiagnostics.postValue(null)
-                _fastbootPartitionInventory.postValue(null)
-                _adbPeerMode.postValue(proto.peerMode)
-                verifyPendingSideloadIfReady(proto)
-                // Recovery installers can boot straight back into SIDELOAD, not RECOVERY.
-                // Record the switch as a postcondition; never infer ZIP install SUCCESS.
-                observePendingSideloadRecoveryTransition(proto)
-                if (proto.peerMode == AdbProtocol.PeerMode.RECOVERY) {
-                    val serial = currentUsbSerial()
-                    val boundary = if (serial != null) proto.captureRecoveryLogBoundary() else null
-                    preparedRecoveryLog = if (serial != null && boundary != null) {
-                        PreparedRecoveryLog(serial, boundary, System.currentTimeMillis())
-                    } else null
-                } else if (proto.peerMode != AdbProtocol.PeerMode.SIDELOAD) {
-                    preparedRecoveryLog = null
-                }
-                _connectionState.postValue(ConnectionState.ADB)
-                diagnosticSessionTracker.recordConnection("ADB", connectedDeviceInfo)
+    private fun postAdbProgress(percent: Int, detail: String) {
+        val currentProgress = operationProgressSnapshot
+        postOperationProgress(
+            OperationProgress(
+                title = currentProgress?.title ?: text(R.string.flash_progress_writing),
+                percent = percent,
+                detail = detail
+            )
+        )
+    }
+
+    private fun connectAdbLocked(proto: AdbProtocol, generation: Long) {
+        proto.onTransportFailure = { code, message ->
+            if (!viewModelCleared.get() && generation == connectionGeneration.get()) {
+                diagnosticSessionTracker.recordTermination("ADB_READER_${code.name}")
+                _adbAndroidRelease.postValue(null)
+                diagnosticSessionTracker.recordMilestone("adb.reader.failure", 0L)
                 persistSessionSummary()
-                logConnectionStatus()
-                if (proto.peerMode == AdbProtocol.PeerMode.DEVICE) {
-                    // Informational read only, on the IO scope and a separate ADB stream.
-                    // Never block ADB readiness or repeat on Activity rotation.
-                    transportScope.launch {
-                        val result = runCatching {
-                            proto.captureShellCommand("getprop ro.build.version.release")
-                        }.getOrNull()
-                        val release = result?.let {
-                            AndroidReleaseMetadataPolicy.parse(it.stdout, it.success, it.exitCode)
-                        }
-                        if (!viewModelCleared.get() &&
-                            generation == connectionGeneration.get() &&
-                            adbProtocol === proto && proto.isConnected &&
-                            proto.peerMode == AdbProtocol.PeerMode.DEVICE) {
-                            _adbAndroidRelease.postValue(release)
-                        }
+                _connectionState.postValue(ConnectionState.ERROR)
+                log("⛔ ADB transport stopped [${code.name}]: $message. Auto-retry is forbidden until manual reconnection.")
+            }
+        }
+        var published = false
+        try {
+            val connectStartedNs = System.nanoTime()
+            if (!proto.connect()) {
+                diagnosticSessionTracker.recordMilestone("adb.connect.failed", (System.nanoTime() - connectStartedNs) / 1_000_000L)
+                if (generation == connectionGeneration.get()) _connectionState.postValue(ConnectionState.ERROR)
+                return
+            }
+            diagnosticSessionTracker.recordMilestone("adb.connect", (System.nanoTime() - connectStartedNs) / 1_000_000L)
+            if (viewModelCleared.get() || generation != connectionGeneration.get()) return
+
+            adbProtocol = proto
+            published = true
+            _fastbootDiagnostics.postValue(null)
+            _fastbootPartitionInventory.postValue(null)
+            _adbPeerMode.postValue(proto.peerMode)
+            verifyPendingSideloadIfReady(proto)
+            // Recovery installers can boot straight back into SIDELOAD, not RECOVERY.
+            // Record the switch as a postcondition; never infer ZIP install SUCCESS.
+            observePendingSideloadRecoveryTransition(proto)
+            if (proto.peerMode == AdbProtocol.PeerMode.RECOVERY) {
+                val serial = currentUsbSerial()
+                val boundary = if (serial != null) proto.captureRecoveryLogBoundary() else null
+                preparedRecoveryLog = if (serial != null && boundary != null) {
+                    PreparedRecoveryLog(serial, boundary, System.currentTimeMillis())
+                } else null
+            } else if (proto.peerMode != AdbProtocol.PeerMode.SIDELOAD) {
+                preparedRecoveryLog = null
+            }
+            _connectionState.postValue(ConnectionState.ADB)
+            diagnosticSessionTracker.recordConnection("ADB", connectedDeviceInfo)
+            persistSessionSummary()
+            logConnectionStatus()
+            if (proto.peerMode == AdbProtocol.PeerMode.DEVICE) {
+                // Informational read only, on the IO scope and a separate ADB stream.
+                // Never block ADB readiness or repeat on Activity rotation.
+                transportScope.launch {
+                    val result = runCatching {
+                        proto.captureShellCommand("getprop ro.build.version.release")
+                    }.getOrNull()
+                    val release = result?.let {
+                        AndroidReleaseMetadataPolicy.parse(it.stdout, it.success, it.exitCode)
+                    }
+                    if (!viewModelCleared.get() &&
+                        generation == connectionGeneration.get() &&
+                        adbProtocol === proto && proto.isConnected &&
+                        proto.peerMode == AdbProtocol.PeerMode.DEVICE) {
+                        _adbAndroidRelease.postValue(release)
                     }
                 }
-            } finally {
-                if (!published || generation != connectionGeneration.get() || viewModelCleared.get()) {
-                    if (adbProtocol === proto) adbProtocol = null
-                    proto.disconnect()
-                }
+            }
+        } finally {
+            if (!published || generation != connectionGeneration.get() || viewModelCleared.get()) {
+                if (adbProtocol === proto) adbProtocol = null
+                proto.disconnect()
             }
         }
     }
@@ -859,6 +920,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             activeOperation?.cancel(CancellationException("Transport shutdown requested: $reason"))
             fastbootProtocol?.cancel()
             adbProtocol?.cancel()
+            // Closing the Wi-Fi socket wakes a blocked network read or write. USB still drains below.
+            adbProtocol?.takeIf { it.isWireless }?.disconnect()
 
             val clean = withTimeoutOrNull(TRANSPORT_SHUTDOWN_TIMEOUT_MS) {
                 activeOperation?.join()
@@ -1566,20 +1629,52 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun runAdbPush(localFile: File, remotePath: String) {
-        startOperation(text(R.string.notif_adb_command), text(R.string.notif_executing, "push ${localFile.name} $remotePath"), requiredTransport = UsbOperationAdmission.RequiredTransport.ADB) {
+    fun runAdbPush(localFile: File, remotePath: String) = runAdbPush(listOf(localFile), remotePath)
+
+    internal fun runAdbPush(localFiles: List<File>, remotePath: String) {
+        val sourceNames = localFiles.joinToString(" ") { it.name }
+        startOperation(text(R.string.notif_adb_command), text(R.string.notif_executing, "push $sourceNames $remotePath"), requiredTransport = UsbOperationAdmission.RequiredTransport.ADB) {
             val proto = adbProtocol ?: failOperation(text(R.string.error_no_adb))
             if (!proto.isConnected) failOperation(text(R.string.error_no_adb))
-            if (!proto.pushPath(localFile, remotePath)) failOperation("ADB push failed")
+            val context = kotlinx.coroutines.currentCoroutineContext()
+            if (!proto.pushPaths(localFiles, remotePath) { context.ensureActive() }) failOperation("ADB push failed")
         }
     }
 
     fun runAdbPull(remotePath: String, localFile: File) {
-        startOperation(text(R.string.notif_adb_command), text(R.string.notif_executing, "pull $remotePath"), requiredTransport = UsbOperationAdmission.RequiredTransport.ADB) {
+        runAdbPull(listOf(remotePath), localFile)
+    }
+
+    internal fun runAdbPull(remotePath: String, localFile: File, expectedProtocol: AdbProtocol) =
+        runAdbPull(listOf(remotePath), localFile, expectedProtocol)
+
+    internal fun runAdbPull(remotePaths: List<String>, localFile: File, expectedProtocol: AdbProtocol? = null): Boolean {
+        val sourceNames = remotePaths.joinToString(" ")
+        return startOperation(text(R.string.notif_adb_command), text(R.string.notif_executing, "pull $sourceNames"), requiredTransport = UsbOperationAdmission.RequiredTransport.ADB) {
             val proto = adbProtocol ?: failOperation(text(R.string.error_no_adb))
             if (!proto.isConnected) failOperation(text(R.string.error_no_adb))
-            if (!proto.pullFile(remotePath, localFile)) failOperation("ADB pull failed")
-        }
+            if (expectedProtocol != null && proto !== expectedProtocol) failOperation("ADB connection changed before starting the transfer")
+            val context = kotlinx.coroutines.currentCoroutineContext()
+            if (!proto.pullFiles(remotePaths, localFile) { context.ensureActive() }) failOperation("ADB pull failed")
+        } != null
+    }
+
+    internal suspend fun listAdbDeviceFiles(
+        protocol: AdbProtocol,
+        path: String
+    ): List<AdbDeviceDirectory.Entry>? {
+        var listing: List<AdbDeviceDirectory.Entry>? = null
+        val task = startOperation(
+            text(R.string.adb_device_files),
+            path,
+            heavy = false,
+            requiredTransport = UsbOperationAdmission.RequiredTransport.ADB
+        ) {
+            if (adbProtocol !== protocol || !protocol.isConnected) failOperation(text(R.string.error_no_adb))
+            listing = protocol.listDeviceFiles(path)
+        } ?: return null
+        task.finished.await()
+        return listing
     }
 
     fun runAdbInstall(packageFile: File, options: List<String>) {
@@ -1735,30 +1830,49 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Read/probe a document off the UI thread; stale picker results cannot replace a later choice. */
-    internal fun addFlashQueueSource(partition: String, source: FirmwareSource) {
-        val target = partition.trim()
+    internal fun addFlashQueueSource(partition: String, source: FirmwareSource) =
+        addFlashQueueSources(listOf(partition to source))
+
+    internal fun addFlashQueueSources(sources: List<Pair<String, FirmwareSource>>) {
+        if (sources.isEmpty()) return
+        val byTarget = sources.associate { (partition, source) -> partition.trim() to source }
         val generation = synchronized(flashDraftLock) {
-            (++queueSourceGeneration).also { pendingQueueSources[target] = it }
+            (++queueSourceGeneration).also { generation ->
+                byTarget.keys.forEach { target -> pendingQueueSources[target] = generation }
+            }
         }
         publishQueueSourceState()
         transportScope.launch {
-            val result = runCatching {
-                FirmwareSelection.from(source).verify(getApplication<Application>().contentResolver) { coroutineContext.ensureActive() }
-                    .queueItem(target)
+            val resolver = getApplication<Application>().contentResolver
+            val results = byTarget.mapValues { (target, source) ->
+                coroutineContext.ensureActive()
+                runCatching {
+                    FirmwareSelection.from(source).verify(resolver) { coroutineContext.ensureActive() }
+                        .queueItem(target)
+                }
             }
             coroutineContext.ensureActive()
             mainHandler.post {
                 if (viewModelCleared.get()) return@post
                 val current = synchronized(flashDraftLock) {
-                    if (pendingQueueSources[target] != generation) false
-                    else { pendingQueueSources.remove(target); true }
+                    results.filterKeys { target ->
+                        if (pendingQueueSources[target] != generation) false
+                        else {
+                            pendingQueueSources.remove(target)
+                            true
+                        }
+                    }
                 }
-                if (!current) return@post
-                result.onSuccess { addFlashQueueItem(it) }.onFailure {
-                    val message = text(R.string.rev24_queue_add_failed, source.displayName, it.message ?: it.javaClass.simpleName)
-                    publishQueueSourceState(message)
-                    log(message)
+                if (current.isEmpty()) return@post
+                val errors = current.mapNotNull { (target, result) ->
+                    result.exceptionOrNull()?.let { error ->
+                        text(R.string.rev24_queue_add_failed, byTarget.getValue(target).displayName,
+                            error.message ?: error.javaClass.simpleName)
+                    }
                 }
+                addFlashQueueItems(current.mapNotNull { (_, result) -> result.getOrNull() })
+                publishQueueSourceState(errors.takeIf { it.isNotEmpty() }?.joinToString("\n"))
+                errors.forEach(::log)
             }
         }
     }
@@ -1781,18 +1895,18 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 log("❌ Could not add file to the queue: ${error.message ?: error.javaClass.simpleName}")
                 return
             }
-        addFlashQueueItem(item)
+        addFlashQueueItems(listOf(item))
     }
 
-    private fun addFlashQueueItem(item: FlashQueueDraftItem) {
-        invalidatePendingQueueSource(item.partition)
-        val next = runCatching { FlashOperationDraftPolicy.upsert(currentFlashOperationDraft(), item) }
+    private fun addFlashQueueItems(items: List<FlashQueueDraftItem>) {
+        if (items.isEmpty()) return
+        val next = runCatching { items.fold(currentFlashOperationDraft(), FlashOperationDraftPolicy::upsert) }
             .getOrElse { error ->
                 log("❌ Could not update queue: ${error.message ?: error.javaClass.simpleName}")
                 return
             }
         publishFlashOperationDraft(next, persist = true)
-        log(text(R.string.flash_queue_updated_log, item.partition, item.displayName))
+        items.forEach { item -> log(text(R.string.flash_queue_updated_log, item.partition, item.displayName)) }
     }
 
     fun moveFlashQueueDraftItem(partition: String, direction: Int) {
@@ -2333,29 +2447,29 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         expectedFastbootSerial: String? = null,
         requiredTransport: UsbOperationAdmission.RequiredTransport = UsbOperationAdmission.RequiredTransport.ANY_USB,
         block: suspend OperationContext.() -> Unit
-    ) {
+    ): ServiceOwnedOperation? {
         synchronized(operationLaunchLock) {
             if (viewModelCleared.get()) {
                 log("⚠️ New operation rejected: USB session is finishing safe shutdown.")
-                return
+                return null
             }
             if (transportRestartRequired.get()) {
                 log("⛔ New operation is blocked: USB transport requires a full NekoFlash restart after unconfirmed cleanup.")
-                return
+                return null
             }
             if (connectionJob?.isCompleted == false) {
                 log("⚠️ USB connect or disconnect is still in progress. Wait for a stable device status.")
-                return
+                return null
             }
             if (localTerminalOperation != null) {
                 log(DiagnosticLogPolicy.Level.WARNING, text(R.string.local_terminal_usb_blocked))
-                return
+                return null
             }
             // A completed Job can still be delivering its completion callbacks.
             // The reference is cleared only after state/resources have been finalized.
             if (hasUnfinishedUsbOperation()) {
                 log("⚠️ Another USB operation is still active. Wait for it to finish first or perform a safe cancel.")
-                return
+                return null
             }
             if (!UsbOperationAdmission.allowed(
                     requiredTransport,
@@ -2373,7 +2487,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         "No connected ADB/Fastboot device. Connect the target over OTG."
                 }
                 log(DiagnosticLogPolicy.Level.ERROR, "ERROR: $reason Command was not sent.")
-                return
+                return null
             }
             val gen = operationGeneration.incrementAndGet()
             val id = UUID.randomUUID().toString()
@@ -2444,6 +2558,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             } catch (error: Exception) {
                 task.rejectStartup(text(R.string.rev20_state_save_failed, error.message ?: error.javaClass.simpleName))
             }
+            return task
         }
     }
 

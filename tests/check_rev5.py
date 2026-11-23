@@ -41,7 +41,9 @@ def run():
     buttons = [el for el in texts if el.tag.endswith('MaterialButton')]
     # REV55: approved safety improvement adds an explicit START button;
     # selection must not directly mutate the target.
-    require(len(buttons) == 4, 'Sideload must have separate Choose, Clear, Start and Import controls')
+    button_ids = [el.attrib.get(AND + 'id') for el in buttons]
+    for value in ['btnAdbSideload', 'btnClearSideloadSelection', 'btnStartAdbSideload', 'btnSideloadImport']:
+        require(button_ids.count('@+id/' + value) == 1, 'Sideload MaterialButton missing or duplicated: ' + value)
     clear_button = next(el for el in buttons if el.attrib.get(AND + 'id') == '@+id/btnClearSideloadSelection')
     require(clear_button.attrib.get(AND + 'visibility') == 'gone',
             'Clear button must be hidden until a ZIP is selected')

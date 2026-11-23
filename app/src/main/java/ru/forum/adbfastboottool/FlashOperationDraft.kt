@@ -88,7 +88,7 @@ object FlashOperationDraftPolicy {
             item.expectedSizeBytes > 0L &&
             item.addedAtEpochMs >= 0L
 
-    private fun normalizePartition(value: String): String? {
+    internal fun normalizePartition(value: String): String? {
         // Exact operator-supplied Fastboot identifiers are case-sensitive.
         val exact = value.trim()
         return exact.takeIf { PARTITION_PATTERN.matches(it) }

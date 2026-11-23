@@ -142,6 +142,7 @@ class MainActivity : AppCompatActivity() {
     private var selectedSideloadSource: FirmwareSource.SafDocument? = null
     private lateinit var quickImageLauncher: ActivityResultLauncher<Intent>
     private lateinit var massImageLauncher: ActivityResultLauncher<Intent>
+    private lateinit var massBatchImageLauncher: ActivityResultLauncher<Array<String>>
     private var pendingMassPartition: String? = null
     private lateinit var miLoginLauncher: ActivityResultLauncher<Intent>
     private lateinit var diagnosticZipLauncher: ActivityResultLauncher<Intent>
@@ -227,8 +228,8 @@ class MainActivity : AppCompatActivity() {
         data class FastbootFetch(val partition: String, val outputFile: File, val slot: String? = null) : TerminalAction()
         data class AdbService(val service: String) : TerminalAction()
         data class AdbShell(val command: String, val redirect: AdbProtocol.ShellRedirect? = null) : TerminalAction()
-        data class AdbPush(val localFile: File, val remotePath: String) : TerminalAction()
-        data class AdbPull(val remotePath: String, val localFile: File) : TerminalAction()
+        data class AdbPush(val localFiles: List<File>, val remotePath: String) : TerminalAction()
+        data class AdbPull(val remotePaths: List<String>, val localFile: File) : TerminalAction()
         data class AdbInstall(val packageFile: File, val options: List<String>) : TerminalAction()
         data class AdbInstallMultiple(val apkFiles: List<File>, val options: List<String>) : TerminalAction()
     }
@@ -478,6 +479,7 @@ class MainActivity : AppCompatActivity() {
                 result.data?.data?.let(::exportDiagnosticArchive)
             }
         }
+        registerMassBatchImageLauncher()
         setupButtons()
         setupFastbootWorkflowUi()
         initializeOperationCenterDialog()
@@ -644,6 +646,10 @@ class MainActivity : AppCompatActivity() {
         }
         updateSideloadSelectionUi()
         findViewById<View>(R.id.btnSideloadImport).setOnClickListener { startImportFilePicker() }
+        findViewById<View>(R.id.btnAdbDeviceFiles).setOnClickListener { openAdbDeviceFiles() }
+        findViewById<View>(R.id.btnAdbWifi).setOnClickListener {
+            adbWifiDialog = AdbWifiDialog(this, viewModel, lifecycleScope).show()
+        }
 
         findViewById<Button>(R.id.btnCancel).setOnClickListener {
             requestOperationCancelFromUi()
@@ -1236,8 +1242,8 @@ class MainActivity : AppCompatActivity() {
                     viewModel.runAdbShell(action.command, action.redirect)
                 }
             }
-            is TerminalAction.AdbPush -> viewModel.runAdbPush(action.localFile, action.remotePath)
-            is TerminalAction.AdbPull -> viewModel.runAdbPull(action.remotePath, action.localFile)
+            is TerminalAction.AdbPush -> viewModel.runAdbPush(action.localFiles, action.remotePath)
+            is TerminalAction.AdbPull -> viewModel.runAdbPull(action.remotePaths, action.localFile)
             is TerminalAction.AdbInstall -> viewModel.runAdbInstall(action.packageFile, action.options)
             is TerminalAction.AdbInstallMultiple -> viewModel.runAdbInstallMultiple(action.apkFiles, action.options)
             is TerminalAction.FastbootPlan,
@@ -1692,23 +1698,32 @@ class MainActivity : AppCompatActivity() {
 
             "push" -> {
                 if (tokens.size < 3) {
-                    invalidTerminalFormat("adb push <local-file> <remote-path>")
+                    invalidTerminalFormat("adb push <local-path>... <remote-path>")
                 } else {
-                    val localPath = resolveTerminalInputPath(tokens[1]) ?: return null
-                    val remoteArg = tokens[2]
-                    val remotePath = if (localPath.isFile && remoteArg.endsWith("/")) remoteArg + localPath.name else remoteArg
-                    TerminalAction.AdbPush(localPath, remotePath)
+                    val sources = tokens.subList(1, tokens.lastIndex)
+                    val localPaths = sources.map {
+                        resolveTerminalLocalPath(it, requireReadable = sources.size == 1) ?: return null
+                    }
+                    val remoteArg = tokens.last()
+                    val localFile = localPaths.singleOrNull()?.takeIf { it.isFile }
+                    val remotePath = if (localFile != null && remoteArg.endsWith("/")) remoteArg + localFile.name else remoteArg
+                    TerminalAction.AdbPush(localPaths, remotePath)
                 }
             }
 
             "pull" -> {
-                if (tokens.size < 2) {
-                    invalidTerminalFormat("adb pull <remote-path> [local-file]")
-                } else {
-                    val remotePath = tokens[1]
-                    val defaultName = remotePath.substringAfterLast('/').ifBlank { "adb-pull.bin" }
-                    val localFile = resolveTerminalOutputFile(tokens.getOrNull(2).orEmpty(), defaultName) ?: return null
-                    TerminalAction.AdbPull(remotePath, localFile)
+                when (tokens.size) {
+                    1 -> invalidTerminalFormat("adb pull <remote-path> [local-path]")
+                    2, 3 -> {
+                        val remotePath = tokens[1]
+                        val defaultName = remotePath.substringAfterLast('/').ifBlank { "adb-pull.bin" }
+                        val localFile = resolveTerminalOutputFile(tokens.getOrNull(2).orEmpty(), defaultName) ?: return null
+                        TerminalAction.AdbPull(listOf(remotePath), localFile)
+                    }
+                    else -> {
+                        val directory = resolveTerminalLocalPath(tokens.last(), requireReadable = false) ?: return null
+                        TerminalAction.AdbPull(tokens.subList(1, tokens.lastIndex), directory)
+                    }
                 }
             }
 
@@ -1730,7 +1745,7 @@ class MainActivity : AppCompatActivity() {
             "install-multiple" -> parseAdbInstallMultiple(tokens)
 
             "sync" -> {
-                viewModel.log("ℹ️ adb sync for directories is not implemented yet. Use adb push/adb pull for individual files.")
+                viewModel.log("ℹ️ adb sync is not implemented. Use adb push or adb pull to transfer files and folders.")
                 null
             }
 
@@ -1848,7 +1863,7 @@ class MainActivity : AppCompatActivity() {
         return bytes
     }
 
-    private fun resolveTerminalInputPath(pathText: String): File? {
+    private fun resolveTerminalLocalPath(pathText: String, requireReadable: Boolean = true): File? {
         val rawPath = pathText.trim().trim('"', '\'')
         if (rawPath.isBlank()) {
             viewModel.log("❌ Local path is not specified")
@@ -1864,7 +1879,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
-        return if (file.exists() && file.canRead()) {
+        return if (!requireReadable || (file.exists() && file.canRead())) {
             file
         } else {
             viewModel.log("❌ Local path was not found or is unavailable: ${file.absolutePath}")
@@ -1874,7 +1889,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun resolveTerminalFile(pathText: String): File? {
-        val file = resolveTerminalInputPath(pathText) ?: return null
+        val file = resolveTerminalLocalPath(pathText) ?: return null
         return if (file.isFile) {
             file
         } else {
@@ -2124,13 +2139,17 @@ class MainActivity : AppCompatActivity() {
             viewModel.log(DiagnosticLogPolicy.Level.ERROR, getString(R.string.rev13_picker_no_document))
             return null
         }
+        retainImageReadPermission(uri)
+        val name = WorkspaceImportNaming.sanitizeImportedFileName(queryDisplayName(uri) ?: getString(R.string.rev13_unnamed_image))
+        return FirmwareSource.SafDocument(uri, name, queryFileSize(uri))
+    }
+
+    private fun retainImageReadPermission(uri: Uri) {
         runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             .onFailure {
                 viewModel.log(getString(R.string.rev24_source_transient))
                 viewModel.logFileOnly("Image document permission: ${it.javaClass.simpleName}")
             }
-        val name = WorkspaceImportNaming.sanitizeImportedFileName(queryDisplayName(uri) ?: getString(R.string.rev13_unnamed_image))
-        return FirmwareSource.SafDocument(uri, name, queryFileSize(uri))
     }
 
     private fun registerQuickImageLauncher() {
@@ -2155,6 +2174,30 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun registerMassBatchImageLauncher() {
+        supportFragmentManager.setFragmentResultListener(MassFlashImageMappingDialog.RESULT_KEY, this) { _, result ->
+            viewModel.addFlashQueueSources(MassFlashImageMappingDialog.readResult(result))
+        }
+        val multipleDocuments = object : ActivityResultContracts.OpenMultipleDocuments() {
+            override fun createIntent(context: Context, input: Array<String>): Intent =
+                super.createIntent(context, input)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        }
+        massBatchImageLauncher = registerForActivityResult(multipleDocuments) { uris ->
+            if (uris.isEmpty()) return@registerForActivityResult
+            uris.forEach(::retainImageReadPermission)
+            MassFlashImageMappingDialog.create(uris, FLASH_PRESET_PARTITIONS)
+                .show(supportFragmentManager, MassFlashImageMappingDialog.RESULT_KEY)
+        }
+    }
+
+    private fun startMassBatchImagePicker() {
+        runCatching { massBatchImageLauncher.launch(arrayOf("*/*")) }.onFailure {
+            viewModel.log(getString(R.string.rev11_picker_open_failed, it.message ?: it.javaClass.simpleName))
+        }
+    }
+
     private fun imageDocumentIntent() = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
         addCategory(Intent.CATEGORY_OPENABLE)
         type = "*/*"
@@ -2175,19 +2218,24 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun chooseImageSource(document: () -> Unit, workspace: (File) -> Unit) {
+    private fun chooseImageSource(document: () -> Unit, workspace: () -> Unit, multipleDocuments: (() -> Unit)? = null) {
+        val choices = buildList {
+            add(R.string.rev13_image_source_android to document)
+            add(R.string.rev13_image_source_workspace to workspace)
+            if (multipleDocuments != null) add(R.string.mass_flash_pick_multiple to multipleDocuments)
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.rev13_image_source_title)
-            .setItems(arrayOf(getString(R.string.rev13_image_source_android), getString(R.string.rev13_image_source_workspace))) { _, which ->
-                if (which == 0) document() else showFileSelector(workspace)
+            .setItems(choices.map { getString(it.first) }.toTypedArray()) { _, which ->
+                choices[which].second()
             }
             .setNegativeButton(R.string.cancel_upper, null)
             .show()
     }
 
-    private fun chooseQuickImageSource() = chooseImageSource(::startQuickImageDocumentPicker) {
-        viewModel.selectQuickFlashSource(FirmwareSource.WorkspaceFile(it))
-    }
+    private fun chooseQuickImageSource() = chooseImageSource(::startQuickImageDocumentPicker, workspace = {
+        showFileSelector { viewModel.selectQuickFlashSource(FirmwareSource.WorkspaceFile(it)) }
+    })
 
     private fun registerImportLauncher() {
         importFileLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -2289,6 +2337,32 @@ class MainActivity : AppCompatActivity() {
         } catch (e: Exception) {
             viewModel.log(DiagnosticLogPolicy.Level.ERROR, getString(R.string.rev11_picker_open_failed, e.message ?: e.javaClass.simpleName))
         }
+    }
+
+    private var adbDeviceFilesDialog: AdbDeviceFilesDialog? = null
+    private var adbWifiDialog: androidx.appcompat.app.AlertDialog? = null
+
+    private fun openAdbDeviceFiles() {
+        val protocol = viewModel.adbProtocol
+        if (protocol?.isConnected != true) {
+            Toast.makeText(this, R.string.error_no_adb, Toast.LENGTH_SHORT).show()
+            return
+        }
+        adbDeviceFilesDialog = AdbDeviceFilesDialog(
+            activity = this,
+            list = { viewModel.listAdbDeviceFiles(protocol, it) },
+            pull = { pullAdbDeviceFile(protocol, it) }
+        ).also { it.show() }
+    }
+
+    private fun pullAdbDeviceFile(protocol: AdbProtocol, path: String): Boolean {
+        if (viewModel.adbProtocol !== protocol || !protocol.isConnected) {
+            Toast.makeText(this, R.string.adb_device_files_connection_changed, Toast.LENGTH_SHORT).show()
+            return false
+        }
+        val filename = path.trimEnd('/').substringAfterLast('/').ifEmpty { "adb-pull" }
+        val destination = resolveTerminalOutputFile("", filename) ?: return false
+        return viewModel.runAdbPull(path, destination, protocol)
     }
 
     private fun ensureWorkspaceReady(): Boolean {
@@ -3516,10 +3590,7 @@ class MainActivity : AppCompatActivity() {
         controls.forEachIndexed { index, button -> button.setOnClickListener { selectSection(index) } }
         selectSection(selectedFastbootSection)
 
-        val namedPartitions = listOf(
-            "boot", "init_boot", "recovery", "vendor_boot", "dtbo",
-            "vbmeta", "system", "vendor", "product", "super"
-        )
+        val namedPartitions = FLASH_PRESET_PARTITIONS
         val labels = namedPartitions + getString(R.string.flash_rev7_partition_manual)
 
         fun partitionSelector(spinnerId: Int, manualId: Int, root: View = window.decorView, onChanged: () -> Unit = {}): () -> String? {
@@ -3664,8 +3735,15 @@ class MainActivity : AppCompatActivity() {
         viewModel.flashOperationDraft.observe(this) { renderQueue(it) }
         viewModel.queueSourceState.observe(this) { renderQueue(viewModel.currentFlashOperationDraft()) }
         massQueueUi.header.findViewById<View>(R.id.btnMassSelectImage).setOnClickListener {
-            val partition = getMassPartition() ?: return@setOnClickListener
-            chooseImageSource({ startMassImageDocumentPicker(partition) }) { file -> viewModel.addFlashQueueFile(partition, file) }
+            chooseImageSource(
+                document = { getMassPartition()?.let(::startMassImageDocumentPicker) },
+                workspace = {
+                    getMassPartition()?.let { partition ->
+                        showFileSelector { file -> viewModel.addFlashQueueFile(partition, file) }
+                    }
+                },
+                multipleDocuments = ::startMassBatchImagePicker
+            )
         }
         queueExecute.setOnClickListener {
             val draft = viewModel.currentFlashOperationDraft()
@@ -4570,8 +4648,9 @@ class MainActivity : AppCompatActivity() {
                 append("\n")
                 append(UsbScanDiagnostics.explain(usbScanEvidence(devices, candidates)))
                 devices.forEachIndexed { index, device ->
+                    val entryNumber: Int = index + 1
                     append("\n\n")
-                    append(getString(R.string.shell_usb_device_entry, index + 1, device.vendorId, device.productId))
+                    append(getString(R.string.shell_usb_device_entry, entryNumber, device.vendorId, device.productId))
                     append("\n")
                     append(getString(R.string.shell_usb_permission,
                         if (runCatching { usbManager.hasPermission(device) }.getOrDefault(false))
@@ -5282,6 +5361,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        adbWifiDialog?.dismiss()
+        adbWifiDialog = null
+        adbDeviceFilesDialog?.dismiss()
+        adbDeviceFilesDialog = null
         operationCenterDialog?.dismiss()
         operationCenterDialog = null
         importDialog?.dismiss()
@@ -5324,6 +5407,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private val PARTITION_NAME_PATTERN = Regex("^[A-Za-z0-9._:-]+$")
+    private val FLASH_PRESET_PARTITIONS = listOf(
+        "boot", "init_boot", "recovery", "vendor_boot", "dtbo",
+        "vbmeta", "system", "vendor", "product", "super"
+    )
 
     companion object {
         private const val GITHUB_URL = "https://github.com/Ncorror/NekoFlash-2.0"

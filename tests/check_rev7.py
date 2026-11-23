@@ -48,7 +48,10 @@ rev59_shell_redirect_vm_blob = '90bb79853e6221d20b9006477175c4ed35fa2e33'
 local_terminal_vm_blob = 'f729ec96acd1b48a069df24390acf8dd8cde67e9'
 # Local copies and overwrite confirmation survive an Activity configuration change.
 retained_local_terminal_vm_blob = '5115ac3dbe1ea7c40a7122de33d921df10bcf082'
-shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob)
+# Multi-file transfers, device file listing, Wireless debugging, and batch Mass Flash selection.
+adb_workflows_vm_blob = '9a8a81aa6b4aaf9cd106f752195fd591455439c4'
+shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, adb_workflows_vm_blob)
+adb_operation_count = 8 if vm_blob == adb_workflows_vm_blob else 7
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
@@ -64,8 +67,8 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT' in vm
         if vm_blob in (rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == 12
-            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
-            assert vm.count('startOperation(') == 20  # 19 call sites and the function declaration
+            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
+            assert vm.count('startOperation(') == 13 + adb_operation_count  # Fastboot, ADB, and the declaration
     if vm_blob in (rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         policy_path = root/'app/src/main/java/ru/forum/adbfastboottool/SideloadRecoveryTransitionPolicy.kt'
         policy = policy_path.read_text()
@@ -93,7 +96,7 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'fun runAdbShell(command: String, redirect: AdbProtocol.ShellRedirect? = null)' in vm
         assert vm.count('AdbProtocol.ShellRedirect') == 1
         assert vm.count('redirect = redirect') == 1
-        assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
+        assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
 elif vm_blob != expected_blob:
     reviewed_change = (
         b'                keyDirectory = adbKeyDir,\n'

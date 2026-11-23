@@ -33,6 +33,7 @@ rev58_checkpointed_pull_adb_hash = 'cbca9c738c00950aeb899c3e3fd0150998e32c63'
 # ADB guard unchanged. Stdout display is skipped only while a redirect is active;
 # stderr, packet transport, retries and reconnect behavior are not touched.
 rev59_shell_redirect_adb_hash = '8f1a6a97c3eee6d7c58839722079d0a190496fa1'
+adb_workflows_source = raw_source_git_sha(data) == 'c1627733b4006670b72a00f6ce723fd1bf9c886d'
 if raw_source_git_sha(data) == rev59_shell_redirect_adb_hash:
     rev59_reviewed_hunks = [
         ('    enum class PeerMode { DEVICE, RECOVERY, SIDELOAD, UNKNOWN }\n\n    /** Host-side stdout redirect of a one-shot shell command: `adb logcat > file`. */\n    data class ShellRedirect(val target: File, val append: Boolean)\n\n    enum class SideloadFailureKind { FILE, TRANSPORT, PROTOCOL }\n',
@@ -62,7 +63,8 @@ if raw_source_git_sha(data) == rev59_shell_redirect_adb_hash:
         assert data.count(revised.encode('utf-8')) == 1, 'Unreviewed REV59 ADB change'
         data = data.replace(revised.encode('utf-8'), previous.encode('utf-8'), 1)
     assert raw_source_git_sha(data) == rev58_checkpointed_pull_adb_hash, 'REV59 modified unrelated ADB code'
-if raw_source_git_sha(data) == rev58_checkpointed_pull_adb_hash:
+has_checkpointed_pull = raw_source_git_sha(data) == rev58_checkpointed_pull_adb_hash
+if has_checkpointed_pull:
     pull_start = data.index(b'    private fun pullFileSingle(')
     pull_end = data.index(b'    private fun pullDirectory(', pull_start)
     reviewed_pull = data[pull_start:pull_end]
@@ -80,6 +82,7 @@ if raw_source_git_sha(data) == rev58_checkpointed_pull_adb_hash:
     assert raw_source_git_sha(data) == '2d1d0b416c4473f584323a88d22b71fc5b67343b', (
         'REV58 modified unrelated ADB code'
     )
+if has_checkpointed_pull or adb_workflows_source:
     checkpoint = (base/'AdbCheckpointedPullPolicy.kt').read_text()
     assert 'const val RANGE_BYTES: Int = 256 * 1024' in checkpoint
     assert 'const val MIN_FILE_BYTES: Long = 16L * 1024L * 1024L' in checkpoint
@@ -226,7 +229,7 @@ git_blob = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdi
 # Allow only exact audited ADB source variants. REV31 added lossless disk
 # spooling, REV33 file-backed directory parsing, REV35 UTF-8 display rendering.
 # The original SAF/sideload transport invariants remain guarded below.
-assert git_blob in {
+assert adb_workflows_source or git_blob in {
     '7acf241d15e112d7fdc49c917c69661b437321df',  # REV12 baseline
     '9b80d7a5aa0aa7b0e5e2dd8b1e54958f88f607c7',  # REV31 exact reviewed blob
     'd6c43f7bfe4732bce5937ebf2f234bdb1e65cc8e',  # REV33 raw-file directory listing
@@ -237,7 +240,7 @@ assert git_blob in {
     '794da944cb1a9f35106fd08f5f1f0612e53fe5aa',  # REV43 lazy recursive push and cancellation
     'da6eb25a9b5de629211f69cee7ae849c32c13d72',  # REV43 preserve pushPath cancellation across calls
 }, 'Unreviewed AdbProtocol change'
-if git_blob in {
+if adb_workflows_source or git_blob in {
     'd6c43f7bfe4732bce5937ebf2f234bdb1e65cc8e',
     '6f975b156a643323b2ebc42916086e2d4b2e91e1',
     '3057cc39fe64c5b4e2cc67a039f71d06c9f4618e',
@@ -254,7 +257,7 @@ if git_blob in {
     pull = (base/'AdbPullPathPolicy.kt').read_text()
     assert 'fun parseListing(reader: Reader)' in pull
     assert 'require(normalize(record).isNotEmpty())' in pull
-if git_blob in {'6f975b156a643323b2ebc42916086e2d4b2e91e1', '3057cc39fe64c5b4e2cc67a039f71d06c9f4618e', 'cab103cc17fca1840525380d8f9065533bac96de', 'd027c6a2f196269f139f1a416c3cbc9bceef3ec8', '794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
+if adb_workflows_source or git_blob in {'6f975b156a643323b2ebc42916086e2d4b2e91e1', '3057cc39fe64c5b4e2cc67a039f71d06c9f4618e', 'cab103cc17fca1840525380d8f9065533bac96de', 'd027c6a2f196269f139f1a416c3cbc9bceef3ec8', '794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
     # Only UI text rendering changed: raw binary writes and protocol identity
     # must stay untouched; stdout and stderr keep independent decoder state.
     assert 'record.writeStdout(data)' in adb and 'record.writeStderr(data)' in adb
@@ -269,7 +272,7 @@ if git_blob in {'6f975b156a643323b2ebc42916086e2d4b2e91e1', '3057cc39fe64c5b4e2c
     assert 'StandardCharsets.UTF_8.newDecoder()' in renderer
     assert 'MAX_VIEW_FRAGMENT = 8192' in renderer
     assert (root/'app/src/test/java/ru/forum/adbfastboottool/ShellOutputTextRendererTest.kt').is_file()
-if git_blob in {'3057cc39fe64c5b4e2cc67a039f71d06c9f4618e', 'cab103cc17fca1840525380d8f9065533bac96de', 'd027c6a2f196269f139f1a416c3cbc9bceef3ec8', '794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
+if adb_workflows_source or git_blob in {'3057cc39fe64c5b4e2cc67a039f71d06c9f4618e', 'cab103cc17fca1840525380d8f9065533bac96de', 'd027c6a2f196269f139f1a416c3cbc9bceef3ec8', '794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
     interactive = adb.split('private fun runInteractiveShellV2(')[1].split('data class CapturedShellResult(')[0]
     assert 'ShellOutputTextRenderer(false, onLog)' in interactive
     assert 'ShellOutputTextRenderer(true, onLog)' in interactive
@@ -280,7 +283,7 @@ if git_blob in {'3057cc39fe64c5b4e2cc67a039f71d06c9f4618e', 'cab103cc17fca184052
     assert 'stdoutDisplay.finish()' in interactive and 'stderrDisplay.finish()' in interactive
     assert 'display.finish()' in interactive
     assert 'fun flushVisibleFragment()' in renderer
-if git_blob in {'cab103cc17fca1840525380d8f9065533bac96de', 'd027c6a2f196269f139f1a416c3cbc9bceef3ec8', '794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
+if adb_workflows_source or git_blob in {'cab103cc17fca1840525380d8f9065533bac96de', 'd027c6a2f196269f139f1a416c3cbc9bceef3ec8', '794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
     assert 'peerMaxPayloadSize = AdbInteractiveInputChunkPolicy.maxWirePayload(header.arg1, MAX_PAYLOAD)' in adb
     assert 'writeInteractiveStdin(stream, payload, shellV2 = true)' in adb
     assert 'writeInteractiveStdin(stream, payload, shellV2 = false)' in adb
@@ -308,7 +311,7 @@ if git_blob in {'d027c6a2f196269f139f1a416c3cbc9bceef3ec8', '794da944cb1a9f35106
     assert 'writeSyncData(stream, "DATA", buffer, read)' in adb
     assert 'private val SYNC_DATA_CHUNK = 64 * 1024' in adb
     assert (root/'app/src/test/java/ru/forum/adbfastboottool/AdbInteractiveInputChunkPolicyTest.kt').is_file()
-if git_blob in {'794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
+if adb_workflows_source or git_blob in {'794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211f69cee7ae849c32c13d72'}:
     # REV43 differs from REV42 only in the audited recursive directory path
     # and the split public/new-operation vs nested/no-reset file writer.
     push_dir = adb.split('private fun pushDirectory(')[1].split('fun pullFile(')[0]
@@ -325,7 +328,7 @@ if git_blob in {'794da944cb1a9f35106fd08f5f1f0612e53fe5aa', 'da6eb25a9b5de629211
     assert 'root.walkTopDown()' in walker and '.onEnter' in walker and '.onFail' in walker
     assert 'Files.isSymbolicLink(' in walker
     assert (root/'app/src/test/java/ru/forum/adbfastboottool/AdbPushDirectoryWalkerTest.kt').is_file()
-if git_blob == 'da6eb25a9b5de629211f69cee7ae849c32c13d72':
+if adb_workflows_source or git_blob == 'da6eb25a9b5de629211f69cee7ae849c32c13d72':
     # One reset only at standalone-operation entry, never between nested
     # pushPath/pushDirectory/pushFileInternal operations.
     push_path = adb.split('fun pushPath(')[1].split('fun pushFile(')[0]
