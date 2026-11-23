@@ -50,8 +50,10 @@ local_terminal_vm_blob = 'f729ec96acd1b48a069df24390acf8dd8cde67e9'
 retained_local_terminal_vm_blob = '5115ac3dbe1ea7c40a7122de33d921df10bcf082'
 # Multi-file transfers, device file listing, Wireless debugging, and batch Mass Flash selection.
 adb_workflows_vm_blob = '9a8a81aa6b4aaf9cd106f752195fd591455439c4'
-shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, adb_workflows_vm_blob)
-adb_operation_count = 8 if vm_blob == adb_workflows_vm_blob else 7
+# Queue slot selection and ordered physical flash targets.
+mass_flash_slots_vm_blob = 'dbdd17dcec9508eb3831e0608d5fb8901f1c3699'
+shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, adb_workflows_vm_blob, mass_flash_slots_vm_blob)
+adb_operation_count = 8 if vm_blob in (adb_workflows_vm_blob, mass_flash_slots_vm_blob) else 7
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
@@ -119,8 +121,13 @@ elif vm_blob != expected_blob:
     assert git_blob_sha(protected_vm) == expected_blob, (
         'DeviceViewModel changed outside the reviewed REV31 evidence path'
     )
-assert 'val ordered = queue' in vm and 'queue.sortedBy' not in vm
-assert 'ordered.forEachIndexed' in vm and 'ordered.mapIndexed' in vm
+assert 'queue.sortedBy' not in vm and 'ordered.forEachIndexed' in vm
+if vm_blob == mass_flash_slots_vm_blob:
+    assert 'val ordered = items.filter' in vm and 'ordered.flatMapIndexed' in vm
+    assert 'resolved.forEachIndexed' in vm and 'publishQueueSteps(resolved)' in vm
+    assert 'resolveTargets(item.partition, slot, proto::resolveSlotPartitionTargets)' in vm
+else:
+    assert 'val ordered = queue' in vm and 'ordered.mapIndexed' in vm
 assert 'fun moveFlashQueueDraftItem' in vm and 'fun removeFlashQueueDraftItem' in vm
 assert 'testImplementation(\'junit:junit:4.13.2\')' in (root/'app/build.gradle').read_text()
 # Stable, reviewed Home replacement; all other original page/protocol hashes stay guarded.
@@ -142,6 +149,7 @@ assert 'switchTab("home")' not in activity.split('private fun openOperationCente
 flash_path = root/'app/src/main/res/layout/page_fastboot.xml'
 raw_flash = flash_path.read_bytes()
 expected_flash_blob = '382822aeb5920f9f73910d0b04e1a55011e4bc05'
+mass_flash_slots_layout_blob = '3ce51efd1195fe07fbaf9421d958ea8336a5283e'
 # REV45 makes exactly four non-personal text inputs opt out of Autofill.
 # Strip ONLY those reviewed attributes before comparing against the original
 # protected REV7 layout; every other layout change still fails integrity.
@@ -162,7 +170,7 @@ for i, line in enumerate(normalized_lines):
         assert line.count(b' android:visibility="gone"') == 1
         normalized_lines[i] = line.replace(b' android:visibility="gone"', b'', 1)
 original_flash = b''.join(normalized_lines)
-assert hashlib.sha1(b'blob ' + str(len(original_flash)).encode() + b'\0' + original_flash).hexdigest() == expected_flash_blob, 'Unexpected Fastboot layout change'
+assert git_blob_sha(original_flash) in (expected_flash_blob, mass_flash_slots_layout_blob), 'Unexpected Fastboot layout change'
 flash = ET.parse(flash_path).getroot()
 flash_ids = [node.attrib.get(a+'id','') for node in flash.iter()]
 for key in ['fastbootQuickSection','fastbootMassSection','fastbootToolsSection','btnQuickExecute','btnMassExecute','toolBlockInfo','toolBlockPartitions','toolBlockSlots','toolBlockDynamic']:

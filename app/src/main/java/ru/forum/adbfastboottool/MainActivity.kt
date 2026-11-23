@@ -3622,7 +3622,10 @@ class MainActivity : AppCompatActivity() {
 
         var onQuickPartitionChanged: () -> Unit = {}
         val getQuickPartition = partitionSelector(R.id.spinQuickPartition, R.id.edQuickManualPartition) { onQuickPartitionChanged() }
-        massQueueUi = MassFlashQueueUi(this, viewModel::moveFlashQueueDraftItem, viewModel::removeFlashQueueDraftItem)
+        massQueueUi = MassFlashQueueUi(
+            this, viewModel::moveFlashQueueDraftItem, viewModel::removeFlashQueueDraftItem,
+            viewModel::setFlashQueueSlot
+        )
         val getMassPartition = partitionSelector(R.id.spinMassPartition, R.id.edMassManualPartition, massQueueUi.header)
         massQueueUi.restoreFormState(restoredMassQueueState)
         restoredMassQueueState = null
@@ -3770,7 +3773,8 @@ class MainActivity : AppCompatActivity() {
                     } else ""
                     reviewProfessionalOperation(
                         ProfessionalOperationReviewPolicy.Action.MASS_FLASH,
-                        resources.getQuantityString(R.plurals.pro_review_queue_count, draft.items.size, draft.items.size) + "\n" + shown + more,
+                        resources.getQuantityString(R.plurals.pro_review_queue_count, draft.items.size, draft.items.size) +
+                            "\n" + massQueueUi.slotLabel(draft.slot) + "\n" + shown + more,
                         runQueue,
                     )
                 } else {

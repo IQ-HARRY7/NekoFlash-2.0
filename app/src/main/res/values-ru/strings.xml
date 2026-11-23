@@ -508,6 +508,9 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="mass_flash_assign_partitions">Разделы для выбранных образов</string>
     <string name="mass_flash_loading_images">Загрузка имён файлов…</string>
     <string name="mass_flash_add_to_queue">Добавить в очередь</string>
+    <string name="mass_flash_slot_title">Слот для очереди</string>
+    <string name="mass_flash_slot_as_listed">Как в очереди</string>
+    <string name="mass_flash_slot_value">Слот · %1$s</string>
     <string name="flash_rev7_queue_empty">Список пуст</string>
     <string name="flash_rev7_flash_queue">Прошить очередь</string>
     <string name="flash_rev7_info">Сведения / getvar</string>

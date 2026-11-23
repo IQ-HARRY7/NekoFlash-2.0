@@ -1929,6 +1929,12 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         log(text(R.string.flash_queue_cleared_log))
     }
 
+    internal fun setFlashQueueSlot(slot: String?) {
+        val draft = currentFlashOperationDraft()
+        val selected = FlashOperationDraftPolicy.selectSlot(draft, slot)
+        if (selected != draft) publishFlashOperationDraft(selected, persist = true)
+    }
+
     fun executeFlashQueueDraft() {
         if (synchronized(flashDraftLock) { pendingQueueSources.isNotEmpty() }) {
             log(text(R.string.rev24_queue_checking, synchronized(flashDraftLock) { pendingQueueSources.keys.joinToString() }))
@@ -1940,7 +1946,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             return
         }
         val executionItems = draft.items.map { FlashQueueItem(it.partition, FirmwareSelection.from(it)) }
-        runFlashQueue(executionItems)
+        runFlashQueue(executionItems, draft.slot)
     }
 
     private fun publishFlashOperationDraft(draft: FlashOperationDraft, persist: Boolean) {
@@ -1952,23 +1958,25 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         _flashOperationDraft.value = draft
     }
 
-    private fun runFlashQueue(items: List<FlashQueueItem>) {
-        val queue = items.filter { it.partition.isNotBlank() }
-        if (queue.isEmpty()) { log(text(R.string.flash_queue_empty_log)); return }
+    private fun runFlashQueue(items: List<FlashQueueItem>, slot: String?) {
+        val ordered = items.filter { it.partition.isNotBlank() }
+        if (ordered.isEmpty()) { log(text(R.string.flash_queue_empty_log)); return }
 
-        // Never reorder operator-defined targets. Execution order must be visible order.
-        val ordered = queue
-
-        startOperation(text(R.string.notif_flash_img), "Flash queue: ${ordered.size} item(s) Do not disconnect the cable.", requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT) {
-            setOperationSteps(ordered.mapIndexed { index, item ->
+        fun publishQueueSteps(targets: List<FlashQueueItem>) {
+            setOperationSteps(targets.mapIndexed { index, item ->
                 OperationStep(
                     index = index + 1,
-                    total = ordered.size,
+                    total = targets.size,
                     title = "flash ${item.partition} ← ${item.selection.displayName}",
                     subtitle = formatBytesShort(requireNotNull(item.selection.expectedSizeBytes)),
                     status = OperationStepStatus.PENDING
                 )
             })
+        }
+
+        val slotLabel = slot?.let { " --slot=$it" }.orEmpty()
+        startOperation(text(R.string.notif_flash_img), "Flash queue: ${ordered.size} item(s)$slotLabel. Do not disconnect the cable.", requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT) {
+            publishQueueSteps(ordered)
             val proto = fastbootProtocol
             if (proto?.isConnected != true) {
                 markOperationStep(1, OperationStepStatus.FAILED, text(R.string.error_no_fastboot))
@@ -1985,10 +1993,23 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     failOperation(reason)
                 }
             }
-            ordered.forEachIndexed { index, item ->
+            // Each expanded slot stays adjacent to its source row in operator-defined order.
+            val resolved = if (slot == null) ordered else ordered.flatMapIndexed { index, item ->
+                context.ensureActive()
+                val targets = FlashOperationDraftPolicy.resolveTargets(item.partition, slot, proto::resolveSlotPartitionTargets)
+                if (targets == null) {
+                    val reason = text(R.string.rev13_fastboot_slot_error, item.partition)
+                    markOperationStep(index + 1, OperationStepStatus.FAILED, reason)
+                    failOperation(reason)
+                }
+                targets.map { target -> item.copy(partition = target) }
+            }
+            if (resolved != ordered) publishQueueSteps(resolved)
+            resolved.forEachIndexed { index, item ->
+                context.ensureActive()
                 val stepNumber = index + 1
                 markOperationStep(stepNumber, OperationStepStatus.RUNNING, "fastboot flash ${item.partition}")
-                log("=== FLASH QUEUE ${stepNumber}/${ordered.size}: ${item.partition} ← ${item.selection.displayName} ===")
+                log("=== FLASH QUEUE ${stepNumber}/${resolved.size}: ${item.partition} ← ${item.selection.displayName} ===")
                 val result = try {
                     flashImage(proto, item.partition, item.selection.source(), expectedSizeBytes = item.selection.expectedSizeBytes) { context.ensureActive() }
                 } catch (cancelled: CancellationException) {

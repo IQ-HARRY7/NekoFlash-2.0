@@ -66,11 +66,12 @@ class OperationRecoveryStoreTest {
         val image = temporary.newFile("boot image.img").apply { writeText("payload") }
         val first = FlashQueueDraftItem("boot_b", image.toURI().toString(), image.name, image.length(), 123456)
         val second = first.copy(partition = "boot_a")
-        val draft = FlashOperationDraft(listOf(first, second))
+        val draft = FlashOperationDraft(listOf(first, second), slot = "b")
         OperationRecoveryStore(dir).writeDraft(draft)
         val restored = OperationRecoveryStore(dir).readDraft()!!
         assertEquals(listOf("boot_b", "boot_a"), restored.items.map { it.partition })
         assertEquals(draft.items, restored.items)
+        assertEquals("b", restored.slot)
     }
     @Test fun clearingDraftPersistsAnEmptyQueue() {
         val store = OperationRecoveryStore(temporary.newFolder())

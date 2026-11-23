@@ -1,6 +1,7 @@
 package ru.forum.adbfastboottool
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -73,6 +74,47 @@ class FlashOperationDraftPolicyTest {
         assertEquals(items.map { it.partition }, restored.items.map { it.partition })
         assertTrue(restored.items.all { it.displayName.endsWith(".img") })
     }
+
+    @Test fun legacyQueueStaysLiteralAndSlotSelectionSurvivesQueueEdits() {
+        val original = FlashOperationDraft(listOf(item("boot"), item("recovery")))
+        val encoded = FlashOperationDraftCodec.encode(original)
+        assertNull(FlashOperationDraftCodec.decode(encoded).slot)
+        assertEquals(listOf("boot"), FlashOperationDraftPolicy.resolveTargets("boot", null) { _, _ ->
+            error("The original queue sends the listed name directly")
+        })
+
+        val selected = FlashOperationDraftPolicy.selectSlot(original, "all")
+        val updated = FlashOperationDraftPolicy.upsert(selected, item("dtbo"))
+        val moved = FlashOperationDraftPolicy.move(updated, "dtbo", -1)
+        val edited = FlashOperationDraftPolicy.remove(moved, "recovery")
+        val restored = FlashOperationDraftCodec.decode(FlashOperationDraftCodec.encode(edited))
+        assertEquals("all", restored.slot)
+        assertEquals(listOf("boot", "dtbo"), restored.items.map { it.partition })
+        assertNull(FlashOperationDraftPolicy.selectSlot(restored, null).slot)
+    }
+
+    @Test fun allPassesBaseNamesToFastbootAndKeepsExplicitNamesInPlace() {
+        val observed = mutableListOf<Pair<String, String>>()
+        val queue = listOf("boot", "recovery", "dtbo_b", "Vendor_B:ramdisk", "xbl_ab")
+        val resolved = queue.flatMap { partition ->
+            requireNotNull(FlashOperationDraftPolicy.resolveTargets(partition, "all") { base, slot ->
+                observed += base to slot
+                if (base == "boot") listOf("boot_a", "boot_b") else listOf(base)
+            })
+        }
+        assertEquals(listOf("boot" to "all", "recovery" to "all"), observed)
+        assertEquals(listOf("boot_a", "boot_b", "recovery", "dtbo_b", "Vendor_B:ramdisk", "xbl_ab"), resolved)
+    }
+
+    @Test fun explicitAOrBIsPassedThroughToFastboot() {
+        for (slot in listOf("a", "b")) {
+            val target = FlashOperationDraftPolicy.resolveTargets("boot", slot) { partition, selected ->
+                listOf("${partition}_$selected")
+            }
+            assertEquals(listOf("boot_$slot"), target)
+        }
+    }
+
     @Test fun changedSourceSizeRequiresReselection() {
         val file = java.nio.file.Files.createTempFile("queue", ".img").toFile()
         try {

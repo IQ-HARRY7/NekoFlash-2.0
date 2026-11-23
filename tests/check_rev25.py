@@ -26,7 +26,10 @@ while node in parents:
     assert 'ScrollView' not in node.tag, 'The queue must own scrolling to recycle offscreen rows'
 assert queue.get(a+'layout_height') == '0dp' and queue.get(a+'layout_weight') == '1'
 execute = next(node for node in layout.iter() if node.get(a+'id') == '@+id/btnMassExecute')
-assert parents[queue] is parents[execute]
+slot = next(node for node in layout.iter() if node.get(a+'id') == '@+id/btnMassSlot')
+footer = parents[execute]
+assert footer.get(a+'id') == '@+id/massFlashFooter' and parents[slot] is footer
+assert parents[queue] is parents[footer]
 activity = ET.parse(root / 'app/src/main/res/layout/activity_main.xml').getroot()
 navigation = next(node for node in activity.iter() if node.get(a+'id') == '@+id/bottomNavigation')
 tabs = [node for node in navigation if node.tag.endswith('MaterialButton')]
