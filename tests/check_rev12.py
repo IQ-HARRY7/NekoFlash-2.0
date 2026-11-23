@@ -357,7 +357,8 @@ assert 'java.nio.ByteBuffer' in source
 assert 'registerDirectSideloadLauncher()' in main
 assert 'startDirectSideloadFilePicker()' in main
 assert 'viewModel.runSideload(source)' in main
-assert 'R.id.btnSideloadImport).setOnClickListener { startImportFilePicker() }' in main
+assert 'R.id.btnSideloadImport' not in main
+assert 'R.id.btnBlockImportFastboot).setOnClickListener { startImportFilePicker() }' in main
 assert 'private val folderName = "NekoFlash"' in main
 assert 'fun runSideload(file: File) = runSideload(FirmwareSource.WorkspaceFile(file))' in vm
 assert 'proto.sideloadZip(source, getApplication<Application>().contentResolver)' in vm
@@ -365,4 +366,4 @@ assert 'persistPendingSideloadVerification(source, proto)' in vm
 assert 'proto.currentDiagnostics().remoteBanner' in vm
 assert 'observePendingSideloadRecoveryTransition(proto)' in vm
 assert (root/'app/src/test/java/ru/forum/adbfastboottool/FirmwareSourceTest.kt').is_file()
-print('PASS REV12: seekable SAF direct Sideload, fallback import, verified recovery, paths unchanged')
+print('PASS REV12: seekable SAF direct Sideload, Flash-tab import fallback retained, verified recovery')
