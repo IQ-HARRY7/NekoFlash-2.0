@@ -85,7 +85,6 @@
     <string name="terminal_shell_confirm_title">Run local shell script?</string>
     <string name="terminal_shell_confirm_message">This script runs as the NekoFlash app UID, not as a desktop shell or root. It can execute commands available on Android and can modify app-accessible files. The fastboot shim sends supported Fastboot commands through the currently connected USB device. Only run scripts from a source you trust. PATH stubs block bare su/run-as names only; absolute paths may bypass those stubs. Android shared storage may reject direct executable files, but sh script.sh can read a script from it.</string>
     <string name="terminal_script_confirm_title">Confirm Fastboot script operation</string>
-    <string name="terminal_script_confirm_message">The shell script requested a destructive Fastboot operation:
 
 %1$s
 
