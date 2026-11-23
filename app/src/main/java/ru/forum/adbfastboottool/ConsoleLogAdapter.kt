@@ -153,7 +153,7 @@ internal class ConsoleLogAdapter(initialTextSizeSp: Float) : RecyclerView.Adapte
         return result
     }
 
-    internal class LineViewHolder(
+    internal inner class LineViewHolder(
         private val textView: TextView,
     ) : RecyclerView.ViewHolder(textView) {
         fun bind(item: Item, textSizeSp: Float) {
