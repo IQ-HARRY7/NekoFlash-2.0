@@ -21,6 +21,14 @@ The local terminal and its review are in `main` through PRs [#107](https://githu
 
 PR [#111](https://github.com/Ncorror/NekoFlash-2.0/pull/111) added the ADB Wi-Fi, device-file browser and multi-image Mass Flash changes to `main` at `2c919c3`. Follow-up PR [#112](https://github.com/Ncorror/NekoFlash-2.0/pull/112) fixed stale async directory results in the device-file browser and added a Robolectric regression for API 26/34; it was merged to `main` at `677d45e`. [PR #112 GitHub Actions run 861](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45256287638) passed build, installed mkfs API 26/34 and verified tester-APK packaging. This is **automated verification**, not physical-device qualification of the new workflows. The signed public release remains Alpha15.
 
+### UI review — 23 November 2026 (not yet released)
+
+- Mass Flash slot selection is a full-width highlighted action fixed above the scrolling image queue, instead of a narrow control beside the destructive Execute button.
+- Wireless ADB pairing/connection and remote Device files were moved from the Sideload page to Home. The existing handlers, connection checks, and file transfers are unchanged.
+- Sideload now only displays Recovery mode guidance, the selected ZIP with Clear, Choose ZIP and Start Sideload. The repeated result disclaimer and redundant Import button were removed from this page.
+- The workspace Import path remains on the Flash tab as a fallback for file providers that cannot supply a seekable ZIP. Actual device transfer and installation status still depend on Recovery evidence.
+- These UI changes require Android CI and manual small-screen validation before distribution; the signed public Alpha15 is unchanged.
+
 ### Unreleased workflows added in PR #111
 
 - Mass Flash can select multiple Android files, map images to queue rows, and select a slot for the queue. The **Plan** action reads targets from the connected Fastboot session and shows the resulting order, repeated targets, and unresolved rows. Explicit partition names such as `boot_a` and `xbl_ab` stay literal. Quick Flash resolves the selected slot at execution and uses explicit slot suffixes as written.
