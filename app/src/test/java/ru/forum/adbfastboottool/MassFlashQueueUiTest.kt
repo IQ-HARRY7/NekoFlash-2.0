@@ -71,7 +71,13 @@ class MassFlashQueueUiTest {
     fun landscapeQueueShowsThePreviewControlForASelectedImage() {
         val controller = Robolectric.buildActivity(Screen::class.java).setup()
         try {
-            val ui = MassFlashQueueUi(controller.get(), { _, _ -> }, {}, {})
+            val activity = controller.get()
+            val ui = MassFlashQueueUi(activity, { _, _ -> }, {}, {})
+            // A short landscape window must keep room for the scrolling queue:
+            // the same slot control moves into the Execute row, with no duplicate.
+            val slot = activity.findViewById<MaterialButton>(R.id.btnMassSlot)
+            assertSame(activity.findViewById<View>(R.id.massFlashFooter), slot.parent)
+            assertEquals(View.GONE, activity.findViewById<View>(R.id.massFlashSlotSelection).visibility)
             ui.render(FlashOperationDraft(), QueueSourceState())
             assertEquals(View.GONE, ui.preview.visibility)
 

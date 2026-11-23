@@ -34,6 +34,7 @@
     <string name="delete_upper">УДАЛИТЬ</string>
     <string name="cancel_upper">ОТМЕНА</string>
     <string name="close_upper">ЗАКРЫТЬ</string>
+    <string name="home_adb_actions_title">ADB · Подключение и файлы</string>
     <string name="adb_device_files">Файлы устройства</string>
     <string name="adb_device_files_location">Файлы устройства · %1$s</string>
     <string name="adb_device_files_up">Вверх</string>
@@ -293,6 +294,8 @@
     <string name="settings_telegram">Telegram</string>
     <string name="settings_telegram_sub">Группа тестировщиков NekoFlash</string>
     <string name="settings_link_open_error">Не удалось открыть ссылку: %1$s</string>
+    <string name="settings_import_workspace">Импорт в рабочую папку</string>
+    <string name="settings_import_workspace_sub">Скопировать файл в Download/NekoFlash</string>
     <string name="settings_clear_workspace">🗑 Очистить рабочую папку</string>
     <string name="settings_clear_workspace_sub">Удалить импортированные файлы из рабочей папки</string>
     <string name="settings_clear_workspace_confirm">Удалить все файлы в:
@@ -500,7 +503,6 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="layout_sideload_confirm_message">Файл: %1$s\nРазмер: %2$s\n\nRecovery обработает этот ZIP. Он может перезаписать разделы или удалить данные. Запускай только на подготовленном устройстве.</string>
     <string name="layout_sideload_zip_required">Внимание: у файла нет расширения .zip. Допустимость пакета проверит Recovery.</string>
     <string name="layout_sideload_empty_zip">ZIP пустой. Передача не запускалась.</string>
-    <string name="layout_sideload_verdict_note">Установка запускается только в подтверждённом режиме Sideload. Итог определяет Recovery, а не только передача файла.</string>
     <string name="shell_usb_panel_desc">USB-подключение: подробности</string>
     <string name="shell_terminal_open_desc">Открыть терминал</string>
     <string name="shell_terminal_icon">&gt;_</string>
@@ -630,7 +632,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev12_sideload_cancelled">ADB Sideload отменён.</string>
     <string name="rev12_sideload_mode_inactive">ADB Sideload не активен. Режим устройства: %1$s.</string>
     <string name="rev12_sideload_failed">Ошибка ADB Sideload (%1$s): %2$s.</string>
-    <string name="rev12_sideload_saf_unsupported">Не удалось прочитать документ напрямую или провайдер не поддерживает произвольный доступ. Используй «Импорт», чтобы скопировать ZIP в прежнюю рабочую папку.</string>
+    <string name="rev12_sideload_saf_unsupported">Документ нельзя прочитать напрямую. Откройте Настройки → Импорт в рабочую папку, затем выберите скопированный ZIP для Sideload.</string>
     <string name="rev13_fastboot_slot_error">Не удалось определить слот Fastboot для раздела %1$s.</string>
     <string name="rev13_direct_saf_failed">Нельзя прошить выбранный документ напрямую. Провайдер может не поддерживать произвольное чтение или недоступен Native USBFS. Выбери образ из рабочей папки NekoFlash.</string>
     <string name="rev13_picker_no_document">Android не вернул выбранный образ.</string>

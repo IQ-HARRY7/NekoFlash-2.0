@@ -13,7 +13,7 @@
         android:orientation="vertical"
         android:padding="10dp">
 
-        <!-- Device facts only. REV7: no actions or operation history on Home. -->
+        <!-- Device facts are kept separate from the ADB connection shortcuts below. -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardHomeDeviceInfo"
             android:layout_width="match_parent"
@@ -123,6 +123,41 @@
                     android:visibility="gone" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
+        <!-- Connection and file tools belong to Home, not to ZIP-only Sideload. -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingBottom="6dp"
+            android:text="@string/home_adb_actions_title"
+            android:textColor="@color/accent"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAdbWifi"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="52dp"
+            android:text="@string/adb_wifi_title"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            app:backgroundTint="@color/bg_elevated"
+            app:cornerRadius="12dp" />
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnAdbDeviceFiles"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:minHeight="52dp"
+            android:text="@string/adb_device_files"
+            android:textAllCaps="false"
+            android:textColor="@color/text_primary"
+            android:textSize="15sp"
+            app:backgroundTint="@color/bg_elevated"
+            app:cornerRadius="12dp" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnHomeAdvancedToggle"
             android:layout_width="match_parent"

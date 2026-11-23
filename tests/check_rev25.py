@@ -28,8 +28,14 @@ assert queue.get(a+'layout_height') == '0dp' and queue.get(a+'layout_weight') ==
 execute = next(node for node in layout.iter() if node.get(a+'id') == '@+id/btnMassExecute')
 slot = next(node for node in layout.iter() if node.get(a+'id') == '@+id/btnMassSlot')
 footer = parents[execute]
-assert footer.get(a+'id') == '@+id/massFlashFooter' and parents[slot] is footer
-assert parents[queue] is parents[footer]
+assert footer.get(a+'id') == '@+id/massFlashFooter'
+slot_selection = parents[slot]
+assert slot_selection.get(a+'id') == '@+id/massFlashSlotSelection'
+assert parents[queue] is parents[footer] is parents[slot_selection]
+assert list(parents[queue]).index(slot_selection) < list(parents[queue]).index(queue), (
+    'Slot choice must be above and outside the scrollable image queue')
+assert slot.get(a+'layout_width') == 'match_parent' and int(slot.get(a+'minHeight').removesuffix('dp')) >= 48
+assert slot.get(app+'strokeColor') == '@color/accent', 'Slot selector must be visible and emphasized'
 activity = ET.parse(root / 'app/src/main/res/layout/activity_main.xml').getroot()
 navigation = next(node for node in activity.iter() if node.get(a+'id') == '@+id/bottomNavigation')
 tabs = [node for node in navigation if node.tag.endswith('MaterialButton')]
@@ -39,4 +45,4 @@ assert 'iconTint' in (java / 'TabController.kt').read_text()
 for workflow in ('build.yml', 'release.yml'):
     assert 'tests/check_rev27.py' in (root / '.github/workflows' / workflow).read_text()
 assert 'tests/collect_android_ui.py' in (root / '.github/workflows/build.yml').read_text()
-print('PASS REV25: recycled ordered queue, independent scrolling, explicit form restoration, five icon tabs')
+print('PASS REV25: recycled ordered queue, persistent prominent slot selection, explicit form restoration, five icon tabs')

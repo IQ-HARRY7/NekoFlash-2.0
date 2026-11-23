@@ -1,6 +1,7 @@
 package ru.forum.adbfastboottool
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Parcelable
 import android.text.format.Formatter
@@ -8,6 +9,7 @@ import android.util.SparseArray
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.ConcatAdapter
@@ -52,6 +54,25 @@ internal class MassFlashQueueUi(
     private var shownItems: List<FlashQueueDraftItem>? = null
 
     init {
+        // In short landscape viewports, the prominent portrait slot selector plus
+        // the fixed Execute footer would leave no room for a RecyclerView header.
+        // Reuse the same slot button in the compact landscape footer, rather than
+        // clipping the queue or hiding the target selection entirely.
+        if (activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            val slotSection = activity.findViewById<LinearLayout>(R.id.massFlashSlotSelection)
+            val footer = activity.findViewById<LinearLayout>(R.id.massFlashFooter)
+            slotSection.removeView(slotButton)
+            slotSection.visibility = View.GONE
+            footer.orientation = LinearLayout.HORIZONTAL
+            val executeParams = execute.layoutParams as LinearLayout.LayoutParams
+            executeParams.width = 0
+            executeParams.weight = 1f
+            execute.layoutParams = executeParams
+            val margin = (8 * activity.resources.displayMetrics.density).toInt()
+            footer.addView(slotButton, 0, LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+            ).apply { marginEnd = margin })
+        }
         slotButton.setOnClickListener {
             val choices = slotChoices.map { (_, label) -> activity.getString(label) }.toTypedArray()
             val checked = slotChoices.indexOfFirst { (slot, _) -> slot == selectedSlot }
