@@ -59,21 +59,25 @@ reviewed_terminal_exit_vm_blob = 'f763572f3a83f76f26a13d9194d699fcaea0ad47'
 shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
-if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
+# Reviewed universal terminal navigation, private HOME, system shell, persisted binary mode, and foreground Fastboot script bridge.
+terminal_shell_v2_vm_blob = '517359a09f5ca61de9f2e2cf7d226a51b6ad656c'
+if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, terminal_shell_v2_vm_blob):
     journal_body = vm.split('private fun logInternal(')[1].split('fun clearLog()')[0]
     assert 'appendCompactMessageLocked(message, declaredLevel)' in journal_body
     assert 'if (duplicate)' not in journal_body
     assert 'recordDuplicateSuppressed()' not in journal_body
-    if vm_blob in (rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
+    if vm_blob in (rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, terminal_shell_v2_vm_blob):
         admission = vm.split('private fun startOperation(')[1].split('val gen = operationGeneration.incrementAndGet()')[0]
         assert 'UsbOperationAdmission.allowed(' in admission
         assert 'FlashOperationService.submit' not in admission
         assert 'No connected ADB/Fastboot device' in admission
         assert 'requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT' in vm
         if vm_blob in (rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
-            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == 12
+            expected_fastboot_calls = 13 if vm_blob == terminal_shell_v2_vm_blob else 12
+            expected_start_operation_calls = 21 if vm_blob == terminal_shell_v2_vm_blob else 20
+            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == expected_fastboot_calls
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
-            assert vm.count('startOperation(') == 20  # 19 call sites and the function declaration
+            assert vm.count('startOperation(') == expected_start_operation_calls
     if vm_blob in (rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         policy_path = root/'app/src/main/java/ru/forum/adbfastboottool/SideloadRecoveryTransitionPolicy.kt'
         policy = policy_path.read_text()
@@ -93,15 +97,36 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'generation == connectionGeneration.get()' in vm
         assert vm.count('_adbAndroidRelease.postValue(null)') >= 3
         assert '_adbAndroidRelease.postValue(release)' in vm
-    if vm_blob in (rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
+    if vm_blob in (rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, terminal_shell_v2_vm_blob):
         finish = vm.split('private fun finishServiceOperation(')[1].split('private fun releaseOperationWakeLock(')[0]
         assert 'reported is OperationOutcome.VerifyPending -> reported' in finish
         assert finish.index('reported is OperationOutcome.VerifyPending -> reported') < finish.index('cause is CancellationException')
-    if vm_blob in shell_redirect_vm_blobs:
+    if vm_blob in shell_redirect_vm_blobs or vm_blob == terminal_shell_v2_vm_blob:
         assert 'fun runAdbShell(command: String, redirect: AdbProtocol.ShellRedirect? = null)' in vm
         assert vm.count('AdbProtocol.ShellRedirect') == 1
         assert vm.count('redirect = redirect') == 1
         assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
+    if vm_blob == terminal_shell_v2_vm_blob:
+        local_shell = (root/'app/src/main/java/ru/forum/adbfastboottool/LocalShell.kt').read_text()
+        assert 'initialHome = localTerminalHome' in vm
+        assert 'initialDeviceBinariesEnabled = terminalPreferences.getBoolean("device_binaries_enabled", false)' in vm
+        assert 'putBoolean("device_binaries_enabled", enabled)' in vm
+        assert 'fun configureHome(homeDirectory: File, publicWorkspace: File?)' in local_shell
+        assert 'Files.createSymbolicLink(alias.toPath(), shared.toPath())' in local_shell
+        assert 'internal fun submitLocalTerminalScriptCommand(' in vm
+        assert 'prepareFastbootSession = false' in vm
+        assert 'requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT' in vm
+        assert 'localScriptExecutionActive' in vm and 'cancelActiveOperation()' in vm
+        assert 'private val localTerminalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)' in vm
+        assert 'confirmDelete = ::requestLocalDelete' in vm
+        assert 'TerminalWelcomeMessage.build(application, deviceBinariesEnabled = localShell.isDeviceBinariesEnabled)' in vm
+        assert 'FastbootVbmeta.createPatchedCopy(' in vm
+        assert 'values[index] == "--disable-verity"' in vm
+        assert 'values[index] == "--disable-verification"' in vm
+        assert 'FastbootShellBridge' in vm
+        script_submit = vm.split('internal fun submitLocalTerminalScriptCommand(')[1].split('private suspend fun requestLocalOverwrite(')[0]
+        assert script_submit.index('val started = startOperation(') < script_submit.index('if (!started) localScriptServiceOwned = false')
+        assert script_submit.index(') {') < script_submit.index('if (!started) localScriptServiceOwned = false')
     if vm_blob in (merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob):
         assert 'internal val localShell = LocalShell { StatFs(it.absolutePath).availableBytes }' in vm
         assert 'TerminalWelcomeMessage.build(application).forEach(::append)' in vm
