@@ -41,9 +41,13 @@ internal class AdbDeviceFilesDialog(
     private var directory = initialDirectory
     private var entries: List<AdbDeviceDirectory.Entry>? = null
     private var loadJob: Job? = null
+    private var loadGeneration = 0L
 
     fun show() {
-        dialog.setOnDismissListener { loadJob?.cancel() }
+        dialog.setOnDismissListener {
+            loadGeneration++
+            loadJob?.cancel()
+        }
         dialog.show()
         dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener {
             AdbDeviceDirectory.parent(directory)?.let(::open)
@@ -63,6 +67,8 @@ internal class AdbDeviceFilesDialog(
     val isShowing: Boolean get() = dialog.isShowing
 
     private fun open(path: String) {
+        loadJob?.cancel()
+        val generation = ++loadGeneration
         directory = path
         entries = null
         title.text = activity.getString(R.string.adb_device_files_location, path)
@@ -72,6 +78,7 @@ internal class AdbDeviceFilesDialog(
         replaceRows(listOf(activity.getString(R.string.adb_device_files_loading)))
         loadJob = activity.lifecycleScope.launch {
             val listing = list(path)
+            if (generation != loadGeneration || !dialog.isShowing) return@launch
             entries = listing
             val rows = when {
                 listing == null -> listOf(activity.getString(R.string.adb_device_files_unavailable))
