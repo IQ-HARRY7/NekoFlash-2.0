@@ -75,8 +75,9 @@ def run():
             'R.id.btnStartAdbSideload' in main,
             'Separate explicit and confirmed Sideload launch is disconnected')
     require('R.id.btnSideloadImport' not in main, 'Sideload must not expose the legacy Import action')
-    require('R.id.btnBlockImportFastboot).setOnClickListener { startImportFilePicker() }' in main,
-            'Workspace import must remain available from the Flash tab')
+    require('svcCard.addView(row(getString(R.string.settings_import_workspace)' in main and
+            'getString(R.string.settings_import_workspace_sub)) { startImportFilePicker() }' in main,
+            'Workspace import must remain reachable in Settings')
     for unrelated in ['btnSideloadImport', 'btnAdbWifi', 'btnAdbDeviceFiles', 'layout_sideload_verdict_note']:
         require(not any(unrelated in node.attrib.values() for node in page.iter()),
                 'Unrelated UI still visible on Sideload: ' + unrelated)
@@ -89,7 +90,7 @@ def run():
     for tab in ['tabHome','tabFastboot','tabAdb','tabUnlock','tabSettings']:
         require(nav.count('android:id="@+id/' + tab + '"') == 1, 'Missing fifth-tab shell ID: ' + tab)
     require('Sideload' in (base/'res/values-ru/strings.xml').read_text(encoding='utf-8'), 'Sideload tab label missing')
-    print(f'PASS: {len(xmls)} XML resources parsed; Sideload 3-button Choose/Clear/Start contract, Home ADB tools, Flash import fallback; RU/EN; original transport hashes; 5 tabs')
+    print(f'PASS: {len(xmls)} XML resources parsed; Sideload 3-button Choose/Clear/Start contract, Home ADB tools, Settings import fallback; RU/EN; original transport hashes; 5 tabs')
 
 if __name__ == '__main__':
     run()
