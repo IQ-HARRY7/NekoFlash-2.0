@@ -12,6 +12,14 @@ policy = (java/'AdbShellRedirectPolicy.kt').read_text()
 publisher = (java/'AdbShellRedirectPublisher.kt').read_text()
 human = (java/'HumanReadable.kt').read_text()
 
+# Quick Flash must offer only real target choices. The internal Fastboot
+# resolver can retain backwards compatibility for older scripted commands.
+quick_slots = main.split('val slotChoices = listOf(', 1)[1].split(')', 1)[0]
+assert '"other" to' not in quick_slots, 'Misleading Other slot still exposed in Quick Flash'
+for entry in ('null to R.string.flash_rev7_slot_current', '"a" to R.string.flash_rev7_slot_a',
+              '"b" to R.string.flash_rev7_slot_b', '"all" to R.string.flash_rev7_slot_all'):
+    assert entry in quick_slots, f'Missing Quick Flash slot option: {entry}'
+
 # Terminal: every shell-producing branch goes through one redirect-aware factory.
 factory = main.split('private fun adbShellAction')[1].split('private fun parseAdbInstallMultiple')[0]
 assert 'AdbShellRedirectPolicy.parse(' in factory
