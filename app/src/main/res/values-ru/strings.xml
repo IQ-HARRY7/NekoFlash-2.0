@@ -203,8 +203,6 @@
     <string name="layout_operation_center_last_event">Последняя запись журнала: %1$s</string>
     <string name="layout_operation_console">Открыть консоль</string>
     <string name="terminal_stop_button">Отмена</string>
-    <string name="terminal_text_size_increase">Увеличить текст терминала (+)</string>
-    <string name="terminal_text_size_decrease">Уменьшить текст терминала (−)</string>
     <string name="local_terminal_running">Выполняется локальная команда…</string>
     <string name="local_terminal_interactive_adb_hint">ADB Shell · ввод отправляется на подключённое устройство</string>
     <string name="local_terminal_copy_progress">Скопировано %1$s из %2$s</string>

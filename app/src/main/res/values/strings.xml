@@ -203,8 +203,6 @@ Not requested:
     <string name="layout_operation_center_last_event">Latest log entry: %1$s</string>
     <string name="layout_operation_console">Open console</string>
     <string name="terminal_stop_button">Cancel</string>
-    <string name="terminal_text_size_increase">Increase terminal text size (+)</string>
-    <string name="terminal_text_size_decrease">Decrease terminal text size (−)</string>
     <string name="local_terminal_running">Running local command…</string>
     <string name="local_terminal_interactive_adb_hint">ADB Shell · input goes to the connected device</string>
     <string name="local_terminal_copy_progress">Copying %1$s of %2$s</string>
