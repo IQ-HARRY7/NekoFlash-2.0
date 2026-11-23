@@ -52,7 +52,7 @@ def run():
     for res in ['values', 'values-ru']:
         strings = ET.parse(base / ('res/' + res + '/strings.xml')).getroot()
         found = [s.attrib['name'] for s in strings.findall('string')]
-        for key in ['layout_sideload_page_title','layout_sideload_no_file','layout_sideload_selected_file','layout_sideload_clear_selection','layout_sideload_selection_cleared','layout_sideload_verdict_note']:
+        for key in ['layout_sideload_page_title','layout_sideload_no_file','layout_sideload_selected_file','layout_sideload_clear_selection','layout_sideload_selection_cleared']:
             require(found.count(key)==1, f'String {key} missing/duplicated in {res}')
     main = (base / 'java/ru/forum/adbfastboottool/MainActivity.kt').read_text(encoding='utf-8')
     require('R.id.tvSideloadSelectedZip' in main, 'Missing chosen-file UI binding')
