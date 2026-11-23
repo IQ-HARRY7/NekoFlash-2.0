@@ -151,6 +151,7 @@ internal class AdbWifiDialog(
                 try {
                     pairedGuid = viewModel.pairWirelessAdb(targetHost, port, pin)
                     code.text?.clear()
+                    showStatus(R.string.adb_wifi_paired)
                     connectIfPaired()
                 } catch (cancelled: CancellationException) {
                     throw cancelled
