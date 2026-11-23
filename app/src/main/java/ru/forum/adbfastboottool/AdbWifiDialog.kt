@@ -213,7 +213,7 @@ internal class AdbWifiDialog(
         })
         root.addView(advanced)
         root.addView(button(R.string.adb_wifi_discovery_rescan) {
-            pairedGuid = null
+            // Preserve a successful pairing while retrying a delayed CONNECT advertisement.
             startDiscovery()
         })
         if (viewModel.adbProtocol?.isWireless == true) {
