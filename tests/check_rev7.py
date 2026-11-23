@@ -61,20 +61,23 @@ shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob,
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 # Reviewed universal terminal navigation, private HOME, system shell, persisted binary mode, and foreground Fastboot script bridge.
 terminal_shell_v2_vm_blob = '517359a09f5ca61de9f2e2cf7d226a51b6ad656c'
-if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, terminal_shell_v2_vm_blob):
+# Build fix: use the AndroidViewModel application context for the vbmeta cache.
+terminal_shell_v2_cache_context_vm_blob = 'ef5bf1292287c16a5570d58e5fcf09ffe465c724'
+terminal_shell_v2_vm_blobs = (terminal_shell_v2_vm_blob, terminal_shell_v2_cache_context_vm_blob)
+if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, *terminal_shell_v2_vm_blobs):
     journal_body = vm.split('private fun logInternal(')[1].split('fun clearLog()')[0]
     assert 'appendCompactMessageLocked(message, declaredLevel)' in journal_body
     assert 'if (duplicate)' not in journal_body
     assert 'recordDuplicateSuppressed()' not in journal_body
-    if vm_blob in (rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, terminal_shell_v2_vm_blob):
+    if vm_blob in (rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, *terminal_shell_v2_vm_blobs):
         admission = vm.split('private fun startOperation(')[1].split('val gen = operationGeneration.incrementAndGet()')[0]
         assert 'UsbOperationAdmission.allowed(' in admission
         assert 'FlashOperationService.submit' not in admission
         assert 'No connected ADB/Fastboot device' in admission
         assert 'requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT' in vm
         if vm_blob in (rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
-            expected_fastboot_calls = 13 if vm_blob == terminal_shell_v2_vm_blob else 12
-            expected_start_operation_calls = 21 if vm_blob == terminal_shell_v2_vm_blob else 20
+            expected_fastboot_calls = 13 if vm_blob in terminal_shell_v2_vm_blobs else 12
+            expected_start_operation_calls = 21 if vm_blob in terminal_shell_v2_vm_blobs else 20
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == expected_fastboot_calls
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
             assert vm.count('startOperation(') == expected_start_operation_calls
@@ -97,16 +100,16 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'generation == connectionGeneration.get()' in vm
         assert vm.count('_adbAndroidRelease.postValue(null)') >= 3
         assert '_adbAndroidRelease.postValue(release)' in vm
-    if vm_blob in (rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, terminal_shell_v2_vm_blob):
+    if vm_blob in (rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, *terminal_shell_v2_vm_blobs):
         finish = vm.split('private fun finishServiceOperation(')[1].split('private fun releaseOperationWakeLock(')[0]
         assert 'reported is OperationOutcome.VerifyPending -> reported' in finish
         assert finish.index('reported is OperationOutcome.VerifyPending -> reported') < finish.index('cause is CancellationException')
-    if vm_blob in shell_redirect_vm_blobs or vm_blob == terminal_shell_v2_vm_blob:
+    if vm_blob in shell_redirect_vm_blobs or vm_blob in terminal_shell_v2_vm_blobs:
         assert 'fun runAdbShell(command: String, redirect: AdbProtocol.ShellRedirect? = null)' in vm
         assert vm.count('AdbProtocol.ShellRedirect') == 1
         assert vm.count('redirect = redirect') == 1
         assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
-    if vm_blob == terminal_shell_v2_vm_blob:
+    if vm_blob in terminal_shell_v2_vm_blobs:
         local_shell = (root/'app/src/main/java/ru/forum/adbfastboottool/LocalShell.kt').read_text()
         assert 'initialHome = localTerminalHome' in vm
         assert 'initialDeviceBinariesEnabled = terminalPreferences.getBoolean("device_binaries_enabled", false)' in vm
