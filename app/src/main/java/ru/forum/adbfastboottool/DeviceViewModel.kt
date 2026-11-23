@@ -1450,7 +1450,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         ) {
                             FastbootVbmeta.createPatchedCopy(
                                 source = image,
-                                temporaryDirectory = File(app.cacheDir, "terminal-vbmeta"),
+                                temporaryDirectory = File(getApplication<Application>().cacheDir, "terminal-vbmeta"),
                                 disableVerity = disableVerity,
                                 disableVerification = disableVerification,
                             )
