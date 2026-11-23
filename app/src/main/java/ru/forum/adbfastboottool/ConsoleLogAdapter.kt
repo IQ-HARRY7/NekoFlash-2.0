@@ -19,7 +19,7 @@ import androidx.recyclerview.widget.RecyclerView
  * the visible portion of a long session. The adapter keeps stable IDs and
  * exposes narrow mutation methods used by MainActivity's batched renderer.
  */
-internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineViewHolder>() {
+internal class ConsoleLogAdapter(initialTextSizeSp: Float) : RecyclerView.Adapter<ConsoleLogAdapter.LineViewHolder>() {
     internal data class Item(
         val id: Long,
         val text: String,
@@ -28,7 +28,13 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
 
     private val items = ArrayList<Item>()
     private var nextId = 1L
-    private var textSizeSp = 12f
+    var textSizeSp = initialTextSizeSp
+        set(value) {
+            val normalized = value.coerceIn(9f, 20f)
+            if (field == normalized) return
+            field = normalized
+            if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
+        }
 
     init {
         setHasStableIds(true)
@@ -76,7 +82,6 @@ internal class ConsoleLogAdapter : RecyclerView.Adapter<ConsoleLogAdapter.LineVi
 
     fun setTextSizeSp(value: Float) {
         textSizeSp = value.coerceIn(9f, 20f)
-        if (items.isNotEmpty()) notifyItemRangeChanged(0, items.size)
     }
 
     private fun newItem(rawLine: String): Item {

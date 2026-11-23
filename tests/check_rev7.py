@@ -19,22 +19,11 @@ expected_blob = 'b80db90bf4aa40edaa29d0dd6a70a698c5a06d45'
 def git_blob_sha(data):
     return hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
 
-# The local mini-shell is owned by the ViewModel so its working directory
-# survives Activity recreation. Normalize only this reviewed dependency line
-# before applying the existing whole-file integrity pins. Any other ViewModel
-# change still has to match an already approved snapshot or narrow exception.
-local_shell_binding = b'    internal val localShell = LocalShell()\n'
-assert raw_vm.count(local_shell_binding) == 1, 'Unexpected local shell ViewModel binding'
-welcome_transcript_binding = (
-    b'    private val transcript = TerminalTranscript().apply {\n'
-    b'        TerminalWelcomeMessage.build(application).forEach(::append)\n'
-    b'    }\n'
-)
-original_transcript_binding = b'    private val transcript = TerminalTranscript().apply { append(initialLines.first()) }\n'
-assert raw_vm.count(welcome_transcript_binding) == 1, 'Unexpected terminal welcome initialization'
-guarded_vm_source = raw_vm.replace(local_shell_binding, b'', 1)
-guarded_vm_source = guarded_vm_source.replace(welcome_transcript_binding, original_transcript_binding, 1)
-guarded_vm_blob = git_blob_sha(guarded_vm_source)
+# The source file is pinned as a complete Git blob. A reviewed terminal
+# extension is accepted below only with explicit admission, cancellation,
+# workspace isolation, and confirmation invariants asserted.
+vm_blob = git_blob_sha(raw_vm)
+
 
 # REV31 allows ONE exact raw-shell evidence directory argument in the ADB
 # constructor. Rebuild the old blob in memory; unrelated orchestration edits
@@ -59,24 +48,31 @@ rev57_sideload_verdict_vm_blob = '9029971de3792a2a4ef04760e29b20fa8c5f412b'
 mi_unlock_diagnostics_vm_blob = 'f408c6b03977b508de737183feaae869722a50bb'
 # REV59: host-side stdout redirect; pin the entire reviewed ViewModel blob.
 rev59_shell_redirect_vm_blob = '90bb79853e6221d20b9006477175c4ed35fa2e33'
+# Local terminal commands share admission with USB and workspace operations.
+local_terminal_vm_blob = 'f729ec96acd1b48a069df24390acf8dd8cde67e9'
+# Local copies and overwrite confirmation survive an Activity configuration change.
+retained_local_terminal_vm_blob = '5115ac3dbe1ea7c40a7122de33d921df10bcf082'
+# EXEC-TEST welcome banner plus ViewModel-owned, confirmation-gated rm support.
+merged_local_terminal_vm_blob = 'dfe58474085a5cb4678b56176d5b734007967f07'
+shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, merged_local_terminal_vm_blob)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
-if guarded_vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
+if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
     journal_body = vm.split('private fun logInternal(')[1].split('fun clearLog()')[0]
     assert 'appendCompactMessageLocked(message, declaredLevel)' in journal_body
     assert 'if (duplicate)' not in journal_body
     assert 'recordDuplicateSuppressed()' not in journal_body
-    if guarded_vm_blob in (rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
+    if vm_blob in (rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         admission = vm.split('private fun startOperation(')[1].split('val gen = operationGeneration.incrementAndGet()')[0]
         assert 'UsbOperationAdmission.allowed(' in admission
         assert 'FlashOperationService.submit' not in admission
         assert 'No connected ADB/Fastboot device' in admission
         assert 'requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT' in vm
-        if guarded_vm_blob in (rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
+        if vm_blob in (rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == 12
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
             assert vm.count('startOperation(') == 20  # 19 call sites and the function declaration
-    if guarded_vm_blob in (rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
+    if vm_blob in (rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         policy_path = root/'app/src/main/java/ru/forum/adbfastboottool/SideloadRecoveryTransitionPolicy.kt'
         policy = policy_path.read_text()
         # Ensure the reviewed recovery switch cannot be promoted into a false
@@ -89,22 +85,33 @@ if guarded_vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_ex
         assert 'before.productName.equals(after.productName, true)' in policy
         assert 'transferFinished' in policy
         assert 'fun sideloadZip(' in (root/'app/src/main/java/ru/forum/adbfastboottool/AdbProtocol.kt').read_text()
-    if guarded_vm_blob in (rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
+    if vm_blob in (rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         assert vm.count('proto.captureShellCommand("getprop ro.build.version.release")') == 1
         assert 'proto.peerMode == AdbProtocol.PeerMode.DEVICE' in vm
         assert 'generation == connectionGeneration.get()' in vm
         assert vm.count('_adbAndroidRelease.postValue(null)') >= 3
         assert '_adbAndroidRelease.postValue(release)' in vm
-    if guarded_vm_blob in (rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, rev59_shell_redirect_vm_blob):
+    if vm_blob in (rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         finish = vm.split('private fun finishServiceOperation(')[1].split('private fun releaseOperationWakeLock(')[0]
         assert 'reported is OperationOutcome.VerifyPending -> reported' in finish
         assert finish.index('reported is OperationOutcome.VerifyPending -> reported') < finish.index('cause is CancellationException')
-    if guarded_vm_blob == rev59_shell_redirect_vm_blob:
+    if vm_blob in shell_redirect_vm_blobs:
         assert 'fun runAdbShell(command: String, redirect: AdbProtocol.ShellRedirect? = null)' in vm
         assert vm.count('AdbProtocol.ShellRedirect') == 1
         assert vm.count('redirect = redirect') == 1
         assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
-elif guarded_vm_blob != expected_blob:
+    if vm_blob == merged_local_terminal_vm_blob:
+        assert 'internal val localShell = LocalShell { StatFs(it.absolutePath).availableBytes }' in vm
+        assert 'TerminalWelcomeMessage.build(application).forEach(::append)' in vm
+        assert 'private val localTerminalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)' in vm
+        assert 'private suspend fun requestLocalDelete(file: File): Boolean' in vm
+        assert 'confirmDelete = ::requestLocalDelete' in vm
+        local_admission = vm.split('internal fun launchLocalTerminalCommand(')[1].split('internal fun cancelLocalTerminalCommand()')[0]
+        assert 'localTerminalOperation != null' in local_admission
+        assert 'hasUnfinishedUsbOperation()' in local_admission
+        assert 'workspaceImport.isBusy' in local_admission
+        assert 'internal fun answerLocalDelete(request: LocalDeleteRequest, delete: Boolean)' in vm
+elif vm_blob != expected_blob:
     reviewed_change = (
         b'                keyDirectory = adbKeyDir,\n'
         b'                // The exact binary shell streams live beside the public\n'

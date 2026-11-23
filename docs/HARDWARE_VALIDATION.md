@@ -1,6 +1,6 @@
 # NekoFlash 2.0 — hardware validation
 
-**Current release qualification:** `v6.0.0-alpha11`, accepted 13 November 2026.
+**Hardware baseline:** `v6.0.0-alpha11`, accepted 13 November 2026. The marble follow-up used signed `v6.0.0-alpha15` on 22 November 2026.
 
 This document is the current verdict. Detailed chronological FAIL → fix → PASS evidence is retained in the [EN physical ledger](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-EN.md) and [RU ledger](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-RU.md).
 
@@ -12,6 +12,9 @@ This document is the current verdict. Detailed chronological FAIL → fix → PA
 | POCO F7/onyx → unlocked POCO X7 Pro/rodin | historical alpha10 ADB/Fastboot/Quick Flash/recovery campaign | PASS for documented builds |
 | POCO F7/onyx → locked POCO X3 Pro/vayu | non-destructive ADB boundary/recursive transfer tests | PASS; no flash/format/unlock performed on this locked target |
 | POCO X3 Pro/vayu host → POCO X3 Pro/vayu target | framework.jar Pull; repeated 128 MiB Pull/Push + SHA-256 | PASS |
+| Android USB host (model unconfirmed) → POCO F5/marble | Xiaomi bootloader unlock; two successful Quick Flash writes to `recovery` with Recovery reboot | FIELD PASS for unlock and `flash:recovery`; A/B recovery writes unverified |
+
+See the [22 November field sequence](testing/PHYSICAL-TEST-EVIDENCE-LEDGER-2026-11-08-EN.md#22-november-2026--poco-f5-marble-xiaomi-unlock-and-recovery) for the unlock state change and the Fastboot fallback when `has-slot:recovery` was unavailable.
 
 ## Final #64 format/wipe acceptance
 

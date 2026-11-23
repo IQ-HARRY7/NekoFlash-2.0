@@ -42,7 +42,7 @@ NekoFlash turns an Android phone or tablet into an ADB and Fastboot host. Flash 
 
 Host root is not required. Target operations depend on the device mode, bootloader state and partition layout. NekoFlash supports devices without A/B slots; it does not assume every device uses them.
 
-**Xiaomi unlock status:** On POCO F5 (`marble`), Xiaomi returned code `20036` with 164 hours remaining. The full unlock test will continue after Xiaomi’s waiting period. [Current unlock guide](https://nekoflash.ncorror.chatgpt.site/guides/xiaomi-unlock-without-pc/).
+**Xiaomi unlock status:** On 22 November 2026, the signed Alpha15 build successfully unlocked a POCO F5 (`marble`) over USB OTG. Fastboot confirmed `unlocked=yes` on a subsequent connection. [Current unlock guide](https://nekoflash.ncorror.chatgpt.site/guides/xiaomi-unlock-without-pc/).
 
 ## See the interface
 
@@ -89,7 +89,7 @@ The alpha15 release commit passed 471 JVM tests and 58 installed-app tests (29 e
 - **X3 Pro host → X3 Pro target:** repeated 128 MiB Pull/Push with matching SHA-256 — FIELD PASS.
 - **Recovery/Sideload, Mass Flash, ADB/Fastboot transitions and terminal rotation/input:** accepted field evidence on the documented rigs.
 - **POCO F7 / onyx as host:** intermittent long inbound USB transfer failures remain documented; resumable Pull preserves completed checkpoints.
-- NekoFlash previously unlocked **POCO X3 Pro, POCO F5 and POCO X7 Pro**. The rewritten unlock path awaits another complete hardware test.
+- **POCO F5 / marble:** Xiaomi Unlock and Quick Flash to `recovery` — FIELD PASS on Alpha15. Separate writes to both Recovery slots remain unverified.
 
 [Current status](docs/STATUS.md) · [Hardware validation](docs/HARDWARE_VALIDATION.md) · [USB troubleshooting](docs/USB_CONNECTION_TROUBLESHOOTING.md)
 
