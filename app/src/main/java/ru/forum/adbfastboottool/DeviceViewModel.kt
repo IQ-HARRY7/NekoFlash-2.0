@@ -3005,23 +3005,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         expectedFastbootSerial: String? = null,
         requiredTransport: UsbOperationAdmission.RequiredTransport = UsbOperationAdmission.RequiredTransport.ANY_USB,
         block: suspend OperationContext.() -> Unit
-    ): Boolean {
-        synchronized(operationLaunchLock) {
-            if (viewModelCleared.get()) {
-                log("⚠️ New operation rejected: USB session is finishing safe shutdown.")
-                return false
-            }
-            if (transportRestartRequired.get()) {
-                log("⛔ New operation is blocked: USB transport requires a full NekoFlash restart after unconfirmed cleanup.")
-                return false
-            }
-            if (connectionJob?.isCompleted == false) {
-                log("⚠️ USB connect or disconnect is still in progress. Wait for a stable device status.")
-                return false
-            }
-            if (localTerminalOperation != null) {
-                log(DiagnosticLogPolicy.Level.WARNING, text(R.string.local_terminal_usb_blocked))
-                return false
     ): ServiceOwnedOperation? {
         synchronized(operationLaunchLock) {
             if (viewModelCleared.get()) {
@@ -3044,7 +3027,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             // The reference is cleared only after state/resources have been finalized.
             if (hasUnfinishedUsbOperation()) {
                 log("⚠️ Another USB operation is still active. Wait for it to finish first or perform a safe cancel.")
-                return false
                 return null
             }
             if (!UsbOperationAdmission.allowed(
@@ -3063,7 +3045,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         "No connected ADB/Fastboot device. Connect the target over OTG."
                 }
                 log(DiagnosticLogPolicy.Level.ERROR, "ERROR: $reason Command was not sent.")
-                return false
                 return null
             }
             val gen = operationGeneration.incrementAndGet()
@@ -3135,7 +3116,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             } catch (error: Exception) {
                 task.rejectStartup(text(R.string.rev20_state_save_failed, error.message ?: error.javaClass.simpleName))
             }
-            return true
             return task
         }
     }
