@@ -38,17 +38,11 @@ assert 'Files.createTempFile(temporaryDirectory.toPath(), "nekoflash-vbmeta-", "
 assert 'ProcessBuilder(command)' in local_shell_source
 assert 'env["TMPDIR"] = temporaryDirectory.absolutePath' in local_shell_source
 assert 'env["NEKOFLASH_FASTBOOT_TOKEN"] = it.authToken' in local_shell_source
-assert 'private const val WIDTH = 37' in welcome
+assert 'private const val WIDTH = 48' in welcome
 assert 'centered("✨ ${details.title}")' in welcome
 assert 'displayWidth(line) == WIDTH' in welcome
 assert 'takeToDisplayWidth(value, CONTENT_WIDTH)' in welcome
-assert 'wrapToDisplayWidth(value, CONTENT_WIDTH)' in welcome
-assert 'line.startsWith("| ")' in welcome
-assert 'line.startsWith("+")' in welcome
-assert 'val border = "+${"-".repeat(WIDTH - 2)}+"' in welcome
-assert 'addAll(row(' in welcome
 assert all(emoji in welcome for emoji in ('📱', '🧩', '📁', '🕒', '📅', '⌂', '↗', '⚙', '↩', '🔗', '▣', '🔐', '💡', '🔄'))
-assert 'line.startsWith("+- ")' in adapter and 'line.startsWith("| ")' in adapter
 assert 'value.startsWith("📱")' in adapter and 'value.startsWith("💡")' in adapter
 assert 'value.startsWith("🟢")' in adapter and 'value.startsWith("🔴")' in adapter
 assert 'centered("help")' in welcome

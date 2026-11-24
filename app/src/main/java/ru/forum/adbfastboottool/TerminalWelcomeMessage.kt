@@ -6,7 +6,7 @@ import android.text.format.DateFormat
 import java.util.Date
 
 internal object TerminalWelcomeMessage {
-    private const val WIDTH = 37
+    private const val WIDTH = 48
     private const val CONTENT_WIDTH = WIDTH - 4
     const val TEXT_SIZE_SP = 9f
 
@@ -91,111 +91,69 @@ internal object TerminalWelcomeMessage {
     }
 
     internal fun layout(details: Details): List<String> {
-        fun frameRow(text: String): String {
-            val padding = " ".repeat((CONTENT_WIDTH - displayWidth(text)).coerceAtLeast(0))
-            return "| $text$padding |"
+        fun row(value: String): String {
+            val text = takeToDisplayWidth(value, CONTENT_WIDTH)
+            val padding = " ".repeat(CONTENT_WIDTH - displayWidth(text))
+            return "║ $text$padding ║"
         }
-        fun row(value: String): List<String> =
-            wrapToDisplayWidth(value, CONTENT_WIDTH).map(::frameRow)
-
         fun centered(value: String): String {
             val text = takeToDisplayWidth(value, CONTENT_WIDTH)
-            val left = ((CONTENT_WIDTH - displayWidth(text)) / 2).coerceAtLeast(0)
-            return frameRow(" ".repeat(left) + text)
+            val left = (CONTENT_WIDTH - displayWidth(text)) / 2
+            return row(" ".repeat(left) + text)
         }
-
         fun section(title: String): String {
-            val safeTitle = takeToDisplayWidth(title, WIDTH - 6)
-            val prefix = "+- $safeTitle "
-            return prefix + "-".repeat((WIDTH - displayWidth(prefix) - 1).coerceAtLeast(0)) + "+"
+            val prefix = "╟─ $title "
+            return prefix + "─".repeat((WIDTH - displayWidth(prefix) - 1).coerceAtLeast(0)) + "╢"
         }
-
-        val border = "+${"-".repeat(WIDTH - 2)}+"
-        val divider = "+${"=".repeat(WIDTH - 2)}+"
-        return buildList {
-            add(border)
-            add(centered("✨ ${details.title}"))
-            add(centered(details.subtitle))
-            add(border)
-            add(divider)
-            add(section(details.environment))
-            addAll(row("📱 ${details.hostLabel} = ${details.host}"))
-            addAll(row("🧩 ${details.abiLabel} = ${details.abi}"))
-            addAll(row("📁 ${details.workspaceLabel} = ${details.workspace}"))
-            addAll(row("${if (details.deviceBinaryStatus.startsWith("ENABLED") || details.deviceBinaryStatus.startsWith("ВКЛЮЧЕНО")) "🟢" else "🔴"} ${details.deviceBinaryLabel} = ${details.deviceBinaryStatus}"))
-            addAll(row("🕒 ${details.timeLabel} = ${details.time}"))
-            addAll(row("📅 ${details.dateLabel} = ${details.date}"))
-            add(border)
-            add(divider)
-            add(section(details.commandSource))
-            addAll(row("⌂ ${details.hostRoute}"))
-            addAll(row("↗ ${details.adbRoute}"))
-            addAll(row("⚙ ${details.fastbootRoute}"))
-            addAll(row("↩ ${details.localAlias}"))
-            addAll(row("🔗 ${details.mixedFastboot}"))
-            addAll(row("▣ ${details.systemShell}"))
-            addAll(row("  ${details.enableCommand}"))
-            addAll(row("  ${details.disableCommand}"))
-            addAll(row("🔐 ${details.accessLabel} = ${details.access}"))
-            add(border)
-            add(divider)
-            add(section(details.help))
-            addAll(row("💡 ${details.helpHint}"))
-            add(centered("help"))
-            addAll(row("🔄 ${details.transport}"))
-            add(border)
-            add(divider)
-        }
+        val top = "╔${"═".repeat(WIDTH - 2)}╗"
+        val bottom = "╚${"═".repeat(WIDTH - 2)}╝"
+        val sectionBottom = "╰${"─".repeat(WIDTH - 2)}╯"
+        val divider = "=".repeat(WIDTH)
+        return listOf(
+            top,
+            centered("✨ ${details.title}"),
+            centered(details.subtitle),
+            bottom,
+            divider,
+            section(details.environment),
+            row("📱 ${details.hostLabel} = ${details.host}"),
+            row("🧩 ${details.abiLabel} = ${details.abi}"),
+            row("📁 ${details.workspaceLabel} = ${details.workspace}"),
+            row("${if (details.deviceBinaryStatus.startsWith("ENABLED") || details.deviceBinaryStatus.startsWith("ВКЛЮЧЕНО")) "🟢" else "🔴"} ${details.deviceBinaryLabel} = ${details.deviceBinaryStatus}"),
+            row("🕒 ${details.timeLabel} = ${details.time}"),
+            row("📅 ${details.dateLabel} = ${details.date}"),
+            sectionBottom,
+            divider,
+            section(details.commandSource),
+            row("⌂ ${details.hostRoute}"),
+            row("↗ ${details.adbRoute}"),
+            row("⚙ ${details.fastbootRoute}"),
+            row("↩ ${details.localAlias}"),
+            row("🔗 ${details.mixedFastboot}"),
+            row("▣ ${details.systemShell}"),
+            row("  ${details.enableCommand}"),
+            row("  ${details.disableCommand}"),
+            row("🔐 ${details.accessLabel} = ${details.access}"),
+            sectionBottom,
+            divider,
+            section(details.help),
+            row("💡 ${details.helpHint}"),
+            centered("help"),
+            row("🔄 ${details.transport}"),
+            sectionBottom,
+            divider,
+        )
     }
 
     internal fun isWelcomeLine(line: String): Boolean =
         displayWidth(line) == WIDTH && (
-            (line.startsWith("+") && line.endsWith("+")) ||
-                (line.startsWith("| ") && line.endsWith(" |"))
+            line == "=".repeat(WIDTH) ||
+                (line.startsWith("╔") && line.endsWith("╗")) ||
+                (line.startsWith("╚") && line.endsWith("╝")) ||
+                (line.startsWith("╟") && line.endsWith("╢")) ||
+                (line.startsWith("╰") && line.endsWith("╯")) ||
+                (line.startsWith("║ ") && line.endsWith(" ║"))
             )
-
-    private fun wrapToDisplayWidth(value: String, maxWidth: Int): List<String> {
-        val words = value.trim().split(Regex("\\s+")).filter(String::isNotEmpty)
-        if (words.isEmpty()) return listOf("")
-        val lines = mutableListOf<String>()
-        var current = StringBuilder()
-
-        fun appendLongWord(word: String) {
-            var fragment = StringBuilder()
-            var fragmentWidth = 0
-            var index = 0
-            while (index < word.length) {
-                val codePoint = word.codePointAt(index)
-                val width = codePointWidth(word, index, codePoint)
-                if (fragmentWidth + width > maxWidth && fragment.isNotEmpty()) {
-                    lines += fragment.toString()
-                    fragment = StringBuilder()
-                    fragmentWidth = 0
-                }
-                fragment.appendCodePoint(codePoint)
-                fragmentWidth += width
-                index += Character.charCount(codePoint)
-            }
-            if (fragment.isNotEmpty()) current = fragment
-        }
-
-        for (word in words) {
-            if (current.isEmpty()) {
-                if (displayWidth(word) <= maxWidth) current.append(word) else appendLongWord(word)
-                continue
-            }
-            val candidate = "$current $word"
-            if (displayWidth(candidate) <= maxWidth) {
-                current.append(' ').append(word)
-            } else {
-                lines += current.toString()
-                current = StringBuilder()
-                if (displayWidth(word) <= maxWidth) current.append(word) else appendLongWord(word)
-            }
-        }
-        if (current.isNotEmpty()) lines += current.toString()
-        return lines.ifEmpty { listOf("") }
-    }
 
     internal fun displayWidth(value: String): Int {
         var width = 0
