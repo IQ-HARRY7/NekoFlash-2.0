@@ -48,7 +48,6 @@ import androidx.core.content.edit
 import androidx.core.graphics.toColorInt
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
-import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import androidx.core.os.LocaleListCompat
@@ -5304,13 +5303,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         when {
-            pinToTop -> rvConsoleOutput.doOnNextLayout { view ->
-                if (!isFinishing && !isDestroyed && consoleDockController.isExpanded) {
-                    (view as? RecyclerView)?.let { output ->
-                        (output.layoutManager as? LinearLayoutManager)?.scrollToPositionWithOffset(0, 0)
-                    }
-                }
-            }
+            pinToTop -> layoutManager?.scrollToPositionWithOffset(0, 0)
             keepPinnedToBottom -> scrollConsoleToBottom()
             decision.removeCount > 0 && firstVisiblePosition >= 0 -> {
                 layoutManager?.scrollToPositionWithOffset(
