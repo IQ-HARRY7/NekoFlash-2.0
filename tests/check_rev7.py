@@ -64,15 +64,19 @@ reviewed_terminal_exit_vm_blob = 'f763572f3a83f76f26a13d9194d699fcaea0ad47'
 integrated_workflows_vm_blob = 'c308da05c4846f6f308d6035e656fa9af726186e'
 # Live slot resolution, Mass Flash plan/report, and ADB session and browser follow-ups.
 workflow_followups_vm_blob = 'fdb0b9dbf32f44bdef2fc037aaa2abb221df9a3f'
+# Reviewed merge of the workflow-followups source with the EXEC-TEST terminal/ROM-script source.
+merged_workflows_terminal_vm_blob = '95048ad4e3adcd6b95c323f758b6b299526615c4'
+workflow_followups_vm_blobs = (workflow_followups_vm_blob, merged_workflows_terminal_vm_blob)
 mass_flash_slots_vm_blobs = (mass_flash_slots_vm_blob, integrated_workflows_vm_blob)
 terminal_exit_vm_blobs = (reviewed_terminal_exit_vm_blob, integrated_workflows_vm_blob, workflow_followups_vm_blob)
 shell_redirect_vm_blobs = (
     rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob,
     adb_workflows_vm_blob, mass_flash_slots_vm_blob, merged_local_terminal_vm_blob, *terminal_exit_vm_blobs,
+    merged_workflows_terminal_vm_blob,
 )
 adb_operation_count = {
     adb_workflows_vm_blob: 8, mass_flash_slots_vm_blob: 8, integrated_workflows_vm_blob: 8,
-    workflow_followups_vm_blob: 9,
+    workflow_followups_vm_blob: 9, merged_workflows_terminal_vm_blob: 9,
 }.get(vm_blob, 7)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
@@ -80,7 +84,10 @@ mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 terminal_shell_v2_vm_blob = '517359a09f5ca61de9f2e2cf7d226a51b6ad656c'
 # Build fix: use the AndroidViewModel application context for the vbmeta cache.
 terminal_shell_v2_cache_context_vm_blob = 'ef5bf1292287c16a5570d58e5fcf09ffe465c724'
-terminal_shell_v2_vm_blobs = (terminal_shell_v2_vm_blob, terminal_shell_v2_cache_context_vm_blob)
+terminal_shell_v2_vm_blobs = (
+    terminal_shell_v2_vm_blob, terminal_shell_v2_cache_context_vm_blob,
+    merged_workflows_terminal_vm_blob,
+)
 if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs, *terminal_shell_v2_vm_blobs):
     journal_body = vm.split('private fun logInternal(')[1].split('fun clearLog()')[0]
     assert 'appendCompactMessageLocked(message, declaredLevel)' in journal_body
@@ -94,13 +101,9 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT' in vm
         if vm_blob in (rev52_explicit_transport_vm_blob, rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
             expected_fastboot_calls = 13 if vm_blob in terminal_shell_v2_vm_blobs else 12
-            expected_start_operation_calls = 21 if vm_blob in terminal_shell_v2_vm_blobs else 20
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == expected_fastboot_calls
-            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
-            assert vm.count('startOperation(') == expected_start_operation_calls
-            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == 12
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
-            assert vm.count('startOperation(') == 13 + adb_operation_count  # Fastboot, ADB, and the declaration
+            assert vm.count('startOperation(') == expected_fastboot_calls + adb_operation_count + 1
     if vm_blob in (rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         policy_path = root/'app/src/main/java/ru/forum/adbfastboottool/SideloadRecoveryTransitionPolicy.kt'
         policy = policy_path.read_text()
@@ -117,7 +120,7 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
     if vm_blob in (rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         probe = 'proto.captureShellCommand("getprop ro.build.version.release"'
         assert vm.count(probe) == 1
-        if vm_blob == workflow_followups_vm_blob:
+        if vm_blob in workflow_followups_vm_blobs:
             connect = vm.split('private fun connectAdbLocked(')[1].split('private suspend fun awaitNativeUsbfsIdle')[0]
             assert connect.index(probe) < connect.index('_connectionState.postValue(ConnectionState.ADB)')
         assert 'proto.peerMode == AdbProtocol.PeerMode.DEVICE' in vm
@@ -132,7 +135,7 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'fun runAdbShell(command: String, redirect: AdbProtocol.ShellRedirect? = null)' in vm
         assert vm.count('AdbProtocol.ShellRedirect') == 1
         assert vm.count('redirect = redirect') == 1
-        assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
+        assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
     if vm_blob in terminal_shell_v2_vm_blobs:
         local_shell = (root/'app/src/main/java/ru/forum/adbfastboottool/LocalShell.kt').read_text()
         assert 'initialHome = localTerminalHome' in vm
@@ -195,7 +198,7 @@ elif vm_blob != expected_blob:
         'DeviceViewModel changed outside the reviewed REV31 evidence path'
     )
 assert 'queue.sortedBy' not in vm and 'ordered.forEachIndexed' in vm
-if vm_blob == workflow_followups_vm_blob:
+if vm_blob in workflow_followups_vm_blobs:
     assert 'val ordered = draft.items' in vm and 'MassFlashPlan.resolve(draft)' in vm
     assert 'resolved.forEachIndexed' in vm and 'publishQueueSteps(resolved)' in vm
     assert 'proto.resolveSlotPartitionTargets(partition, slot)' in vm
@@ -205,6 +208,11 @@ elif vm_blob in mass_flash_slots_vm_blobs:
     assert 'resolveTargets(item.partition, slot, proto::resolveSlotPartitionTargets)' in vm
 else:
     assert 'val ordered = queue' in vm and 'ordered.mapIndexed' in vm
+if vm_blob == merged_workflows_terminal_vm_blob:
+    assert 'when (output.exitCode)' in vm
+    assert '0 -> logLocalTerminal("✓ ' in vm
+    assert '130 -> logLocalTerminal("! ' in vm
+    assert 'R.string.local_terminal_exit_code' in vm
 assert 'fun moveFlashQueueDraftItem' in vm and 'fun removeFlashQueueDraftItem' in vm
 assert 'testImplementation(\'junit:junit:4.13.2\')' in (root/'app/build.gradle').read_text()
 # Stable, reviewed Home replacement; all other original page/protocol hashes stay guarded.
