@@ -5303,7 +5303,9 @@ class MainActivity : AppCompatActivity() {
         }
 
         when {
-            pinToTop -> layoutManager?.scrollToPositionWithOffset(0, 0)
+            pinToTop -> if (!isFinishing && !isDestroyed && consoleDockController.isExpanded) {
+                layoutManager?.scrollToPositionWithOffset(0, 0)
+            }
             keepPinnedToBottom -> scrollConsoleToBottom()
             decision.removeCount > 0 && firstVisiblePosition >= 0 -> {
                 layoutManager?.scrollToPositionWithOffset(
