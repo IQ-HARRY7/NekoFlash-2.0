@@ -34,6 +34,41 @@
     <string name="delete_upper">DELETE</string>
     <string name="cancel_upper">Cancel</string>
     <string name="close_upper">CLOSE</string>
+    <string name="home_adb_actions_title">ADB · Connection and files</string>
+    <string name="adb_device_files">Device files</string>
+    <string name="adb_device_files_location">Device files · %1$s</string>
+    <string name="adb_device_files_up">Up</string>
+    <string name="adb_device_files_pull_directory">Pull folder</string>
+    <string name="adb_device_files_push_here">Send here</string>
+    <string name="adb_device_files_loading">Opening folder…</string>
+    <string name="adb_device_files_unavailable">Could not open this folder. See the operation log.</string>
+    <string name="adb_device_files_no_entries">No files or folders to display.</string>
+    <string name="adb_device_files_connection_changed">The ADB connection changed. Reopen Device files.</string>
+    <string name="adb_wifi_title">ADB over Wi-Fi</string>
+    <string name="adb_wifi_discovery_guide">On the target phone open Developer options → Wireless debugging → Pair with code. NekoFlash discovers the address and ports automatically.</string>
+    <string name="adb_wifi_discovery_searching">Looking for Wireless ADB devices on your Wi-Fi…</string>
+    <string name="adb_wifi_discovery_found">Detected Wireless ADB services</string>
+    <string name="adb_wifi_discovery_unavailable">Automatic discovery is unavailable. Check Wi-Fi/VPN or enter an address manually.</string>
+    <string name="adb_wifi_discovery_pair_device">Pairing · %1$s:%2$d</string>
+    <string name="adb_wifi_discovery_connect_device">Connection · %1$s:%2$d</string>
+    <string name="adb_wifi_discovery_wait_connect">Paired. Waiting for this device connection port…</string>
+    <string name="adb_wifi_manual_expand">Manual address (advanced)</string>
+    <string name="adb_wifi_discovery_rescan">Scan again</string>
+    <string name="adb_wifi_host">IP address, hostname or IP:port</string>
+    <string name="adb_wifi_connection_port">Connection port</string>
+    <string name="adb_wifi_pairing_port">Pairing port</string>
+    <string name="adb_wifi_pairing_code">6-digit pairing code</string>
+    <string name="adb_wifi_host_error">Enter an address or a valid address and port</string>
+    <string name="adb_wifi_port_error">Enter a port from 1 to 65535</string>
+    <string name="adb_wifi_code_error">Enter the six digits shown on the device</string>
+    <string name="adb_wifi_pair">Pair</string>
+    <string name="adb_wifi_connect">Connect</string>
+    <string name="adb_wifi_disconnect">Disconnect Wi-Fi ADB</string>
+    <string name="adb_wifi_pairing">Pairing…</string>
+    <string name="adb_wifi_paired">Paired. Looking for the matching connection service…</string>
+    <string name="adb_wifi_pair_failed">Pairing failed. Check the address, pairing port and active code, then try again.</string>
+    <string name="adb_wifi_restart_transport">Restart NekoFlash to finish closing the previous transport before connecting.</string>
+    <string name="adb_wifi_endpoint">ADB over Wi-Fi · %1$s</string>
     <string name="ok_understood_upper">OK</string>
     <string name="open_upper">OPEN</string>
     <string name="later_upper">LATER</string>
@@ -246,6 +281,7 @@ Not requested:
     <string name="local_terminal_replace_message">A file already exists at %1$s.</string>
     <string name="local_terminal_replace">Replace</string>
     <string name="layout_operation_cancel">Cancel operation</string>
+    <string name="layout_operation_all_steps">All steps</string>
     <plurals name="layout_operation_steps_more">
         <item quantity="one">… and %1$d more step</item>
         <item quantity="other">… and %1$d more steps</item>
@@ -271,6 +307,8 @@ Not requested:
     <string name="settings_telegram">Telegram</string>
     <string name="settings_telegram_sub">NekoFlash tester group</string>
     <string name="settings_link_open_error">Could not open link: %1$s</string>
+    <string name="settings_import_workspace">Import file to workspace</string>
+    <string name="settings_import_workspace_sub">Copy a document into Download/NekoFlash</string>
     <string name="settings_clear_workspace">🗑 Clear workspace folder</string>
     <string name="settings_clear_workspace_sub">Delete imported files from the working folder</string>
     <string name="settings_clear_workspace_confirm">Delete all files in:
@@ -379,8 +417,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <!-- Quick Flash slot selection -->
     <string name="quick_flash_slot_dialog_title">Where to flash %1$s</string>
     <string name="quick_flash_slot_dialog_message">This partition reports has-slot=yes. Choose the target slot before selecting an image.</string>
-    <string name="quick_flash_active_slot_target">Active slot %1$s → %2$s</string>
-    <string name="quick_flash_current_slot">current</string>
+    <string name="quick_flash_active_slot_target">Active slot at time of flashing</string>
     <string name="quick_flash_all_slots_range" tools:ignore="TypographyDashes">All slots a–%1$s (--slot=all)</string>
     <string name="quick_flash_all_slots" tools:ignore="TypographyDashes">All slots (--slot=all)</string>
 
@@ -477,7 +514,6 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="layout_sideload_confirm_message">File: %1$s\nSize: %2$s\n\nRecovery will process this ZIP. This may overwrite installed partitions or user data. Start only when the target device is ready.</string>
     <string name="layout_sideload_zip_required">Note: this file has no .zip extension. Recovery will decide whether it is a valid package.</string>
     <string name="layout_sideload_empty_zip">This ZIP is empty. Nothing was sent.</string>
-    <string name="layout_sideload_verdict_note">Install runs only in confirmed Sideload mode. The final result is determined by Recovery, not merely by file transfer.</string>
     <string name="shell_usb_panel_desc">USB connection details</string>
     <string name="shell_terminal_open_desc">Open terminal</string>
     <string name="shell_terminal_icon">&gt;_</string>
@@ -518,6 +554,23 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="flash_rev7_device_control">Device control</string>
     <string name="flash_rev7_reboot">Reboot (manual)</string>
     <string name="flash_rev7_add_image">Add / replace image</string>
+    <string name="mass_flash_pick_multiple">Android files · multiple images</string>
+    <string name="mass_flash_assign_partitions">Partitions for selected images</string>
+    <string name="mass_flash_loading_images">Loading file names…</string>
+    <string name="mass_flash_add_to_queue">Add to queue</string>
+    <string name="mass_flash_slot_title">Slot for the queue</string>
+    <string name="mass_flash_slot_as_listed">Current / exact</string>
+    <string name="mass_flash_slot_value">Slot · %1$s</string>
+    <string name="mass_flash_preview_button">Plan</string>
+    <string name="mass_flash_preview_title">Flash plan</string>
+    <string name="mass_flash_preview_loading">Reading Fastboot targets…</string>
+    <string name="mass_flash_preview_unresolved">%1$s · exact slot target unavailable</string>
+    <string name="mass_flash_preview_repeated">%1$s · repeated target</string>
+    <string name="mass_flash_preview_row">%1$d. %2$s ← %3$s</string>
+    <string name="mass_flash_repeated_targets">Repeated targets in the queue · %1$s</string>
+    <string name="mass_flash_step_not_run">Step was skipped</string>
+    <string name="mass_flash_step_error">Flashing %1$s failed. %2$s</string>
+    <string name="mass_flash_result">Flash queue · written %1$d · failed %2$d · skipped %3$d</string>
     <string name="flash_rev7_queue_empty">Queue is empty</string>
     <string name="flash_rev7_flash_queue">Flash queue</string>
     <string name="flash_rev7_info">Information / getvar</string>
@@ -546,7 +599,6 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="flash_rev7_row_down">Down</string>
     <string name="flash_rev7_row_remove">Remove</string>
     <string name="flash_rev7_invalid_target">Invalid partition name. Use the exact partition identifier.</string>
-    <string name="flash_rev7_slot_unknown">Cannot resolve other slot without current-slot. Select a concrete slot.</string>
     <string name="flash_rev7_no_file_error">Select an image first.</string>
     <string name="mi_unlock_advanced_options">Additional parameters</string>
     <string name="mi_unlock_status_unverified">Bootloader state is not verified; reconnect in Fastboot and refresh diagnostics</string>
@@ -591,7 +643,7 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev12_sideload_cancelled">ADB Sideload cancelled.</string>
     <string name="rev12_sideload_mode_inactive">ADB Sideload is not active. Device mode: %1$s.</string>
     <string name="rev12_sideload_failed">ADB Sideload error (%1$s): %2$s.</string>
-    <string name="rev12_sideload_saf_unsupported">The document cannot be read directly or does not support random access. Use Import to copy the ZIP into the existing workspace.</string>
+    <string name="rev12_sideload_saf_unsupported">The document cannot be read directly. Use Settings → Import file to workspace, then select the copied ZIP for Sideload.</string>
     <string name="rev13_fastboot_slot_error">Cannot resolve the Fastboot slot for partition %1$s.</string>
     <string name="rev13_direct_saf_failed">Cannot flash the selected document directly. The provider may not support random access or Native USBFS may be unavailable. Choose an image from the NekoFlash workspace instead.</string>
     <string name="rev13_picker_no_document">Android did not return a selected image.</string>

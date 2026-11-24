@@ -52,11 +52,28 @@ rev59_shell_redirect_vm_blob = '90bb79853e6221d20b9006477175c4ed35fa2e33'
 local_terminal_vm_blob = 'f729ec96acd1b48a069df24390acf8dd8cde67e9'
 # Local copies and overwrite confirmation survive an Activity configuration change.
 retained_local_terminal_vm_blob = '5115ac3dbe1ea7c40a7122de33d921df10bcf082'
+# Multi-file transfers, device file listing, Wireless debugging, and batch Mass Flash selection.
+adb_workflows_vm_blob = '9a8a81aa6b4aaf9cd106f752195fd591455439c4'
+# Queue slot selection and ordered physical flash targets.
+mass_flash_slots_vm_blob = 'dbdd17dcec9508eb3831e0608d5fb8901f1c3699'
 # EXEC-TEST welcome banner plus ViewModel-owned, confirmation-gated rm support.
 merged_local_terminal_vm_blob = 'dfe58474085a5cb4678b56176d5b734007967f07'
 # PR #108 review: propagate nonzero exit status without claiming false success.
 reviewed_terminal_exit_vm_blob = 'f763572f3a83f76f26a13d9194d699fcaea0ad47'
-shell_redirect_vm_blobs = (rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob, merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob)
+# Combined Mass Flash and ADB workflows with the terminal changes on main.
+integrated_workflows_vm_blob = 'c308da05c4846f6f308d6035e656fa9af726186e'
+# Live slot resolution, Mass Flash plan/report, and ADB session and browser follow-ups.
+workflow_followups_vm_blob = 'fdb0b9dbf32f44bdef2fc037aaa2abb221df9a3f'
+mass_flash_slots_vm_blobs = (mass_flash_slots_vm_blob, integrated_workflows_vm_blob)
+terminal_exit_vm_blobs = (reviewed_terminal_exit_vm_blob, integrated_workflows_vm_blob, workflow_followups_vm_blob)
+shell_redirect_vm_blobs = (
+    rev59_shell_redirect_vm_blob, local_terminal_vm_blob, retained_local_terminal_vm_blob,
+    adb_workflows_vm_blob, mass_flash_slots_vm_blob, merged_local_terminal_vm_blob, *terminal_exit_vm_blobs,
+)
+adb_operation_count = {
+    adb_workflows_vm_blob: 8, mass_flash_slots_vm_blob: 8, integrated_workflows_vm_blob: 8,
+    workflow_followups_vm_blob: 9,
+}.get(vm_blob, 7)
 # Mi Unlock terminal OKAY receipt; durable success before USB detach, exact reviewed snapshot.
 mi_unlock_terminal_vm_blob = '50d14ede8d84159c93835ee82d29a9b930869ca2'
 # Reviewed universal terminal navigation, private HOME, system shell, persisted binary mode, and foreground Fastboot script bridge.
@@ -81,6 +98,9 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == expected_fastboot_calls
             assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == 7
             assert vm.count('startOperation(') == expected_start_operation_calls
+            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT') == 12
+            assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
+            assert vm.count('startOperation(') == 13 + adb_operation_count  # Fastboot, ADB, and the declaration
     if vm_blob in (rev55_recovery_transition_vm_blob, rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
         policy_path = root/'app/src/main/java/ru/forum/adbfastboottool/SideloadRecoveryTransitionPolicy.kt'
         policy = policy_path.read_text()
@@ -95,7 +115,11 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'transferFinished' in policy
         assert 'fun sideloadZip(' in (root/'app/src/main/java/ru/forum/adbfastboottool/AdbProtocol.kt').read_text()
     if vm_blob in (rev56_android_release_vm_blob, rev57_sideload_verdict_vm_blob, mi_unlock_diagnostics_vm_blob, mi_unlock_terminal_vm_blob, *shell_redirect_vm_blobs):
-        assert vm.count('proto.captureShellCommand("getprop ro.build.version.release")') == 1
+        probe = 'proto.captureShellCommand("getprop ro.build.version.release"'
+        assert vm.count(probe) == 1
+        if vm_blob == workflow_followups_vm_blob:
+            connect = vm.split('private fun connectAdbLocked(')[1].split('private suspend fun awaitNativeUsbfsIdle')[0]
+            assert connect.index(probe) < connect.index('_connectionState.postValue(ConnectionState.ADB)')
         assert 'proto.peerMode == AdbProtocol.PeerMode.DEVICE' in vm
         assert 'generation == connectionGeneration.get()' in vm
         assert vm.count('_adbAndroidRelease.postValue(null)') >= 3
@@ -131,6 +155,8 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert script_submit.index('val started = startOperation(') < script_submit.index('if (!started) localScriptServiceOwned = false')
         assert script_submit.index(') {') < script_submit.index('if (!started) localScriptServiceOwned = false')
     if vm_blob in (merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob):
+        assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
+    if vm_blob in (merged_local_terminal_vm_blob, *terminal_exit_vm_blobs):
         assert 'internal val localShell = LocalShell { StatFs(it.absolutePath).availableBytes }' in vm
         assert 'TerminalWelcomeMessage.build(application).forEach(::append)' in vm
         assert 'private val localTerminalScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)' in vm
@@ -141,7 +167,7 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'hasUnfinishedUsbOperation()' in local_admission
         assert 'workspaceImport.isBusy' in local_admission
         assert 'internal fun answerLocalDelete(request: LocalDeleteRequest, delete: Boolean)' in vm
-        if vm_blob == reviewed_terminal_exit_vm_blob:
+        if vm_blob in terminal_exit_vm_blobs:
             assert 'when (output.exitCode)' in vm
             assert '0 -> logLocalTerminal("✓ ' in vm
             assert '130 -> logLocalTerminal("! ' in vm
@@ -168,15 +194,24 @@ elif vm_blob != expected_blob:
     assert git_blob_sha(protected_vm) == expected_blob, (
         'DeviceViewModel changed outside the reviewed REV31 evidence path'
     )
-assert 'val ordered = queue' in vm and 'queue.sortedBy' not in vm
-assert 'ordered.forEachIndexed' in vm and 'ordered.mapIndexed' in vm
+assert 'queue.sortedBy' not in vm and 'ordered.forEachIndexed' in vm
+if vm_blob == workflow_followups_vm_blob:
+    assert 'val ordered = draft.items' in vm and 'MassFlashPlan.resolve(draft)' in vm
+    assert 'resolved.forEachIndexed' in vm and 'publishQueueSteps(resolved)' in vm
+    assert 'proto.resolveSlotPartitionTargets(partition, slot)' in vm
+elif vm_blob in mass_flash_slots_vm_blobs:
+    assert 'val ordered = items.filter' in vm and 'ordered.flatMapIndexed' in vm
+    assert 'resolved.forEachIndexed' in vm and 'publishQueueSteps(resolved)' in vm
+    assert 'resolveTargets(item.partition, slot, proto::resolveSlotPartitionTargets)' in vm
+else:
+    assert 'val ordered = queue' in vm and 'ordered.mapIndexed' in vm
 assert 'fun moveFlashQueueDraftItem' in vm and 'fun removeFlashQueueDraftItem' in vm
 assert 'testImplementation(\'junit:junit:4.13.2\')' in (root/'app/build.gradle').read_text()
 # Stable, reviewed Home replacement; all other original page/protocol hashes stay guarded.
 home_path = root/'app/src/main/res/layout/page_home.xml'
 raw_home = home_path.read_bytes()
-# REV48 extracts only the contextual center into its own layout.
-expected_home_blob = '7437ad7b61a11a33844f967a397317f45680840b'
+# User-approved Home ADB shortcuts replace the previous facts-only layout.
+expected_home_blob = '345a37db2747b650228b7d20814a3906bd3637ad'
 assert hashlib.sha1(b'blob ' + str(len(raw_home)).encode() + b'\0' + raw_home).hexdigest() == expected_home_blob, 'Unexpected Home layout change'
 from xml.etree import ElementTree as ET
 home = ET.parse(home_path).getroot()
@@ -191,6 +226,7 @@ assert 'switchTab("home")' not in activity.split('private fun openOperationCente
 flash_path = root/'app/src/main/res/layout/page_fastboot.xml'
 raw_flash = flash_path.read_bytes()
 expected_flash_blob = '382822aeb5920f9f73910d0b04e1a55011e4bc05'
+mass_flash_slots_layout_blob = '3ce51efd1195fe07fbaf9421d958ea8336a5283e'
 # REV45 makes exactly four non-personal text inputs opt out of Autofill.
 # Strip ONLY those reviewed attributes before comparing against the original
 # protected REV7 layout; every other layout change still fails integrity.
@@ -211,7 +247,12 @@ for i, line in enumerate(normalized_lines):
         assert line.count(b' android:visibility="gone"') == 1
         normalized_lines[i] = line.replace(b' android:visibility="gone"', b'', 1)
 original_flash = b''.join(normalized_lines)
-assert hashlib.sha1(b'blob ' + str(len(original_flash)).encode() + b'\0' + original_flash).hexdigest() == expected_flash_blob, 'Unexpected Fastboot layout change'
+# The approved Mass Flash selector now stays above the scrolling queue.
+# Keep the full new file pinned while retaining normalized older snapshots.
+approved_sticky_slot_flash_blob = 'cd07dd0ab9b6efffe2bb6a8b4ecc239a800581cb'
+assert git_blob_sha(original_flash) in (expected_flash_blob, mass_flash_slots_layout_blob) or (
+    git_blob_sha(raw_flash) == approved_sticky_slot_flash_blob
+), 'Unexpected Fastboot layout change'
 flash = ET.parse(flash_path).getroot()
 flash_ids = [node.attrib.get(a+'id','') for node in flash.iter()]
 for key in ['fastbootQuickSection','fastbootMassSection','fastbootToolsSection','btnQuickExecute','btnMassExecute','toolBlockInfo','toolBlockPartitions','toolBlockSlots','toolBlockDynamic']:

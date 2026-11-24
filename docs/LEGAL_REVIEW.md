@@ -6,7 +6,7 @@ This is a maintainer checklist, not legal advice.
 
 NekoFlash project source is distributed under the root Apache License 2.0 unless a file or component states otherwise.
 
-Project artwork listed in [ASSETS_LICENSE.md](../ASSETS_LICENSE.md) is excluded from the Apache-2.0 branding/artwork grant.
+Project artwork listed in [ASSETS_LICENSE.md](../ASSETS_LICENSE.md) is excluded from the repository's Apache-2.0 grant.
 
 ## Third-party material
 
@@ -18,12 +18,15 @@ They retain their upstream GPL-2.0/component-specific licensing and are not reli
 
 The current release model therefore keeps `filesystem-tools-source.tar.gz` alongside the APK as corresponding source. See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and [vendor/filesystems/README.md](../vendor/filesystems/README.md).
 
+The development source also declares `adb-kt` for Wireless debugging. Its upstream attribution and transitive dependencies are recorded in [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md).
+
 ## Current public release
 
-`v6.0.0-alpha11` publishes custom assets:
-- `NekoFlash-6.0.0-alpha11.apk`;
-- `NekoFlash-6.0.0-alpha11.apk.sha256`;
-- `filesystem-tools-source.tar.gz`.
+[v6.0.0-alpha15](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha15) publishes three custom assets.
+
+- `NekoFlash-6.0.0-alpha15.apk`
+- `NekoFlash-6.0.0-alpha15.apk.sha256`
+- `filesystem-tools-source.tar.gz`
 
 GitHub additionally exposes automatic source-code archives for the tag.
 

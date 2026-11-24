@@ -1,6 +1,7 @@
 package ru.forum.adbfastboottool
 
 import android.app.Activity
+import android.content.res.Configuration
 import android.os.Bundle
 import android.os.Parcelable
 import android.text.format.Formatter
@@ -8,6 +9,7 @@ import android.util.SparseArray
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.ConcatAdapter
@@ -16,12 +18,14 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 
 /** Presentation only. The ViewModel keeps the authoritative order and execution snapshot. */
 internal class MassFlashQueueUi(
     activity: Activity,
     onMove: (String, Int) -> Unit,
-    onRemove: (String) -> Unit
+    onRemove: (String) -> Unit,
+    onSlotSelected: (String?) -> Unit
 ) {
     // Inflation asks the RecyclerView parent for LayoutParams immediately.
     private val list: RecyclerView = activity.findViewById<RecyclerView>(R.id.rvMassQueue).apply {
@@ -29,6 +33,15 @@ internal class MassFlashQueueUi(
     }
     val header: View = activity.layoutInflater.inflate(R.layout.view_mass_flash_header, list, false)
     val execute: MaterialButton = activity.findViewById(R.id.btnMassExecute)
+    val preview: MaterialButton = header.findViewById(R.id.btnMassPreview)
+    private val slotButton: MaterialButton = activity.findViewById(R.id.btnMassSlot)
+    private val slotChoices = listOf(
+        null to R.string.mass_flash_slot_as_listed,
+        "a" to R.string.flash_rev7_slot_a,
+        "b" to R.string.flash_rev7_slot_b,
+        "all" to R.string.flash_rev7_slot_all
+    )
+    private var selectedSlot: String? = null
     private val heading: TextView = header.findViewById(R.id.tvMassQueueTitle)
     private val empty: View = header.findViewById(R.id.tvMassQueueEmpty)
     private val sourcesText: TextView = header.findViewById(R.id.tvMassSourceStatus)
@@ -41,6 +54,37 @@ internal class MassFlashQueueUi(
     private var shownItems: List<FlashQueueDraftItem>? = null
 
     init {
+        // In short landscape viewports, the prominent portrait slot selector plus
+        // the fixed Execute footer would leave no room for a RecyclerView header.
+        // Reuse the same slot button in the compact landscape footer, rather than
+        // clipping the queue or hiding the target selection entirely.
+        if (activity.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            val slotSection = activity.findViewById<LinearLayout>(R.id.massFlashSlotSelection)
+            val footer = activity.findViewById<LinearLayout>(R.id.massFlashFooter)
+            slotSection.removeView(slotButton)
+            slotSection.visibility = View.GONE
+            footer.orientation = LinearLayout.HORIZONTAL
+            val executeParams = execute.layoutParams as LinearLayout.LayoutParams
+            executeParams.width = 0
+            executeParams.weight = 1f
+            execute.layoutParams = executeParams
+            val margin = (8 * activity.resources.displayMetrics.density).toInt()
+            footer.addView(slotButton, 0, LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f
+            ).apply { marginEnd = margin })
+        }
+        slotButton.setOnClickListener {
+            val choices = slotChoices.map { (_, label) -> activity.getString(label) }.toTypedArray()
+            val checked = slotChoices.indexOfFirst { (slot, _) -> slot == selectedSlot }
+            MaterialAlertDialogBuilder(activity)
+                .setTitle(R.string.mass_flash_slot_title)
+                .setSingleChoiceItems(choices, checked) { dialog, which ->
+                    onSlotSelected(slotChoices[which].first)
+                    dialog.dismiss()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
         // ConcatAdapter always has one header item, even while the asynchronous
         // ListAdapter has no rows. Without gating on the ROW adapter, the
         // RecyclerView can consume a saved deep scroll position against only
@@ -56,6 +100,8 @@ internal class MassFlashQueueUi(
     }
 
     fun render(draft: FlashOperationDraft, sources: QueueSourceState) {
+        selectedSlot = draft.slot
+        slotButton.text = slotLabel(selectedSlot)
         if (shownItems !== draft.items) {
             shownItems = draft.items
             val reveal = pendingReveal
@@ -73,6 +119,7 @@ internal class MassFlashQueueUi(
         val context = heading.context
         heading.text = if (draft.isEmpty) context.getString(R.string.flash_rev7_queue_empty)
             else context.getString(R.string.flash_rev7_queue_count, draft.items.size)
+        preview.isVisible = !draft.isEmpty
         empty.isVisible = draft.isEmpty && sources.pending.isEmpty()
         sourcesText.text = listOfNotNull(
             sources.pending.takeIf { it.isNotEmpty() }?.let {
@@ -83,6 +130,27 @@ internal class MassFlashQueueUi(
         execute.isEnabled = draft.items.isNotEmpty() && sources.pending.isEmpty()
         execute.text = if (draft.isEmpty) context.getString(R.string.flash_rev7_flash_queue)
             else context.resources.getQuantityString(R.plurals.rev25_flash_queue, draft.items.size, draft.items.size)
+    }
+
+    fun slotLabel(slot: String?): String {
+        val choice = slotChoices.firstOrNull { it.first == slot }?.second ?: R.string.mass_flash_slot_as_listed
+        val context = slotButton.context
+        return context.getString(R.string.mass_flash_slot_value, context.getString(choice))
+    }
+
+    fun planRows(steps: List<MassFlashPlan.Step>): List<String> {
+        val context = preview.context
+        val repeated = MassFlashPlan.repeatedTargets(steps)
+        return steps.mapIndexed { index, step ->
+            val target = step.target
+            val label = when {
+                target == null -> context.getString(R.string.mass_flash_preview_unresolved, step.source.partition)
+                target in repeated -> context.getString(R.string.mass_flash_preview_repeated, target)
+                else -> target
+            }
+            val ordinal: Int = index + 1
+            context.getString(R.string.mass_flash_preview_row, ordinal, label, step.source.displayName)
+        }
     }
 
     fun saveFormState(): Bundle = Bundle().apply {

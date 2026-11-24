@@ -134,4 +134,36 @@ class FirmwareSelectionLifecycleTest {
         assertEquals("new.img", vm.currentFlashOperationDraft().items.single().displayName)
         assertTrue(vm.queueSourceState.value!!.pending.isEmpty())
     }
+
+    @Test fun multipleSelectionsKeepOrderAndReplaceAnExistingTargetInPlace() {
+        val vm = DeviceSessionStore.get(app)
+        vm.addFlashQueueFile("vendor_boot", image("old-vendor.img"))
+        vm.addFlashQueueSources(listOf(
+            "dtbo" to FirmwareSource.WorkspaceFile(image("dtbo.img")),
+            "vendor_boot" to FirmwareSource.WorkspaceFile(image("new-vendor.img")),
+            "boot_a" to FirmwareSource.WorkspaceFile(image("boot.img"))
+        ))
+        finishReads(vm)
+        val items = vm.currentFlashOperationDraft().items
+        assertEquals(listOf("vendor_boot", "dtbo", "boot_a"), items.map { it.partition })
+        assertEquals(listOf("new-vendor.img", "dtbo.img", "boot.img"), items.map { it.displayName })
+        assertEquals(items, OperationRecoveryStore(File(app.filesDir, "execution-state")).readDraft()?.items)
+        assertTrue(vm.queueSourceState.value!!.pending.isEmpty())
+        assertNull(shadowOf(app).nextStartedService)
+    }
+
+    @Test fun aBatchDoesNotReviveRemovedRowsOrUndoANewerChoice() {
+        val vm = DeviceSessionStore.get(app)
+        vm.addFlashQueueSources(listOf(
+            "recovery" to FirmwareSource.WorkspaceFile(image("recovery.img")),
+            "boot" to FirmwareSource.WorkspaceFile(image("old-boot.img")),
+            "dtbo" to FirmwareSource.WorkspaceFile(File(app.filesDir, "missing.img"))
+        ))
+        vm.removeFlashQueueDraftItem("recovery")
+        vm.addFlashQueueFile("boot", image("new-boot.img"))
+        finishReads(vm)
+        assertEquals("new-boot.img", vm.currentFlashOperationDraft().items.single().displayName)
+        assertTrue(vm.queueSourceState.value!!.pending.isEmpty())
+        assertNotNull(vm.queueSourceState.value!!.error)
+    }
 }

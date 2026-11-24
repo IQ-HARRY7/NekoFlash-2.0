@@ -1,4 +1,13 @@
 pluginManagement {
+    buildscript {
+        repositories {
+            google()
+        }
+        dependencies {
+            // The Wireless debugging dependency was compiled with Kotlin 2.4.
+            classpath('com.android.tools:r8:9.1.31')
+        }
+    }
     repositories {
         google()
         mavenCentral()
@@ -10,6 +19,13 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {
+            url = uri('https://jitpack.io')
+            content {
+                includeModule('com.github.rhythmcache', 'adb-kt')
+                includeModule('com.github.rhythmcache', 'spake2-kt')
+            }
+        }
     }
 }
 rootProject.name = "NekoFlash"

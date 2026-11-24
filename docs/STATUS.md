@@ -1,6 +1,6 @@
 # NekoFlash 2.0 — current status
 
-**Updated:** 22 November 2026
+**Updated:** 23 November 2026
 
 ## Signed release
 
@@ -15,7 +15,42 @@
 
 Public assets are the signed APK, its SHA-256 file and the required filesystem corresponding-source archive. Alpha11 through alpha14 remain available as historical signed releases.
 
-## Main and public website
+## Development snapshot
+
+The local terminal and its review are in `main` through PRs [#107](https://github.com/Ncorror/NekoFlash-2.0/pull/107), [#108](https://github.com/Ncorror/NekoFlash-2.0/pull/108) and [#110](https://github.com/Ncorror/NekoFlash-2.0/pull/110). [GitHub Actions passed on `a665837`](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45174261292).
+
+PR [#111](https://github.com/Ncorror/NekoFlash-2.0/pull/111) added the ADB Wi-Fi, device-file browser and multi-image Mass Flash changes to `main` at `2c919c3`. Follow-up PR [#112](https://github.com/Ncorror/NekoFlash-2.0/pull/112) fixed stale async directory results in the device-file browser and added a Robolectric regression for API 26/34; it was merged to `main` at `677d45e`. [PR #112 GitHub Actions run 861](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45256287638) passed build, installed mkfs API 26/34 and verified tester-APK packaging. This is **automated verification**, not physical-device qualification of the new workflows. The signed public release remains Alpha15.
+
+### Wireless ADB discovery — 24 November 2026 (merged, hardware verification pending)
+
+PR [#114](https://github.com/Ncorror/NekoFlash-2.0/pull/114) merged at `b0c7d2a`. [GitHub Actions #881](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45289128881) **PASS**: 540/540 JVM tests, zero Android Lint issues, API 26 + API 34 installed-app tests, and verified tester APK packaging. The Robolectric runtime dependency is pinned to the canonical Maven Central host after a prior HTTP 429 on repo1.maven.org. This is not a physical-device pairing/connect PASS; the signed public Alpha15 remains unchanged.
+
+- Add foreground-only discovery of Android 11+ Wireless debugging endpoints using Android NSD (`_adb-tls-pairing._tcp.` and `_adb-tls-connect._tcp.`). This does **not** replace the existing tested TLS pairing client or ADB socket transport.
+- A shorter dialog shows detected IP/port endpoints, asks for the six-digit pairing code and selects the matching connection endpoint by the GUID returned from pairing. It never silently connects to an unrelated discovered device; users can still select a connection manually.
+- The former manual IP/connection/pairing port fields remain available in a collapsible advanced section for restricted networks, VPN/multicast issues and older targets. Discovery stops and releases its multicast lock when the dialog closes.
+- Mass Flash's default null slot override now reads **Current** (EN **Current / exact**), retaining the existing exact partition identifiers and avoiding any forced slot switch; explicit A/B/all overrides remain unchanged.
+- Source references reviewed: Shizuku `AdbMdns.kt` (NSD callbacks), Android ADB Wi-Fi architecture documentation. No upstream code copied wholesale.
+- Test coverage: GUID-to-mDNS endpoint-selection unit tests and Android build/lint/instrumentation are green. Real host/target Wi-Fi pairing, reconnect, VPN/mDNS fallback and small-screen UI remain to be validated before the next signed release.
+
+### UI review — 23–24 November 2026 (merged, not yet in the signed release)
+
+PR [#113](https://github.com/Ncorror/NekoFlash-2.0/pull/113) was merged at `c9e4c04`. [GitHub Actions #875](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45278414841): **PASS** (538/538 JVM tests; Android Lint zero warnings/errors; Android API 26/34 installed-app tests; verified tester APK packaging). The Android instrumentation includes large-font portrait/landscape screen coverage. Real phone tests of these new workflows remain pending.
+
+- Mass Flash slot selection is a full-width highlighted action fixed above the scrolling image queue in portrait. In short landscape viewports, the same highlighted selector shares the fixed bottom action row with Execute so the RecyclerView has room for its editable form. This preserves the selected slot and keeps both actions accessible.
+- Wireless ADB pairing/connection and remote Device files were moved from the Sideload page to Home. The existing handlers, connection checks, and file transfers are unchanged.
+- Sideload now only displays Recovery mode guidance, the selected ZIP with Clear, Choose ZIP and Start Sideload. The repeated result disclaimer and redundant Import button were removed from this page.
+- Workspace Import remains directly reachable under Settings → Service, as a fallback for file providers that cannot supply a seekable ZIP; the older Fastboot-only import button is in an inactive legacy card. Actual device transfer and installation status still depend on Recovery evidence.
+- Automated Android CI and emulator layout validation passed; manual tests on the donor/target phones remain pending. The signed public Alpha15 is unchanged.
+
+### Unreleased workflows added in PR #111
+
+- Mass Flash can select multiple Android files, map images to queue rows, and select a slot for the queue. The **Plan** action reads targets from the connected Fastboot session and shows the resulting order, repeated targets, and unresolved rows. Explicit partition names such as `boot_a` and `xbl_ab` stay literal. Quick Flash resolves the selected slot at execution and uses explicit slot suffixes as written.
+- The ADB device file browser lists remote folders, pulls files or folders into the workspace, and sends Android documents to the selected remote folder. Terminal Push and Pull accept multiple sources with a common destination.
+- ADB over Wi-Fi pairs with the target's Android 11+ Wireless debugging service. Pairing and connection use the ports shown on the target. When a device disconnects during an accepted reboot, the Wi-Fi connection ends and the operation records the accepted reboot.
+
+Earlier local verification of `a291271` passed 536 JVM tests, built the Debug APK and the instrumentation APK, and completed Android Lint with zero errors and 14 warnings. The JVM suite includes a loopback fixture for ADB over TLS and cases for the resolved flash plan. The merged PR #111 includes later lint fixes. The verified PR #112 tester kit is available as an Actions artifact; real-device qualification of Wireless debugging pairing/connect/reconnect, file-browser Push/Pull, and Mass Flash's target preview/non-destructive plan is **pending**. Device and build coverage is recorded in [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
+
+## Public website
 
 PR #103 integrated donor-phone ADB stdout redirection by @IQ-HARRY7, preserving the original contributor commit. PR #104 included the feature in alpha15. A tester APK passed `>` and `>>`, large `logcat` captures and cancellation with partial output over USB OTG from POCO F7 to POCO X3 Pro.
 
@@ -46,6 +81,8 @@ This change first shipped in Alpha14. It passed on POCO F5 in the signed Alpha15
 
 ## Hardware disposition
 
+These field results apply to the builds and devices documented in [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
+
 | Area | Result |
 | --- | --- |
 | vayu `fastboot format userdata` | FIELD PASS; Android subsequently booted |
@@ -59,15 +96,14 @@ This change first shipped in Alpha14. It passed on POCO F5 in the signed Alpha15
 | Quick Flash Recovery on POCO F5 (`marble`) | FIELD PASS for two `flash:recovery` writes and `reboot-recovery`. With “All slots” selected, the bootloader returned `FAILGetVar Variable Not found` for `has-slot:recovery` and the app used `flash:recovery`. A/B recovery writes remain unverified. |
 | Terminal rotation/input/header | FIELD PASS for the reproduced regression scenario |
 
-Detailed history: [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md).
-
 ## Known limitations
 
 - Hardware qualification applies only to tested device/firmware combinations.
 - POCO F7/onyx can intermittently fail long inbound USB transfers as host. Power/VBUS sensitivity is plausible but not proven because voltage/current were not instrumented.
 - Raw diagnostics are intentionally complete and may contain sensitive identifiers/paths.
 - Xiaomi WebView authentication cookies persist until explicit Logout; this is intentional session behavior and must be considered on shared host phones.
-- GitHub repository rulesets were empty when read during this audit. The protected release environment is proven by the real approval-gated release, but main branch protection could not be read through the connected GitHub App. See [REPOSITORY_SECURITY.md](REPOSITORY_SECURITY.md).
+
+See [REPOSITORY_SECURITY.md](REPOSITORY_SECURITY.md) for release approval and GitHub settings evidence.
 
 ## Next development rule
 

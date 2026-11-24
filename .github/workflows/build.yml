@@ -4,7 +4,7 @@ on:
   push:
     branches: [ "main" ]
   pull_request:
-    branches: [ "main", "codex/pr106-local-terminal" ]
+    branches: [ "main" ]
   workflow_dispatch:
     inputs:
       sign_release:

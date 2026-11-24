@@ -4,9 +4,13 @@ This document describes the current NekoFlash source tree. It is not a substitut
 
 ## Local operations
 
-ADB, Fastboot, USB discovery, file transfer, flashing, Sideload, diagnostics and command execution are performed locally between the Android host running NekoFlash and the USB-connected target.
+ADB, Fastboot, USB discovery, file transfer, flashing, Sideload, diagnostics and command execution can operate between the Android host running NekoFlash and the USB-connected target. The development source also supports ADB over Android 11+ Wireless debugging. It connects directly to the target address and port entered by the operator.
 
 The current source tree contains no analytics, advertising or third-party crash-reporting SDK.
+
+## Wireless debugging
+
+NekoFlash uses the pairing code as the shared secret in Android's authenticated pairing exchange. The saved dialog draft contains the address and ports. The paired host identity persists in the app-private directory so that the target can authorize later connections.
 
 ## Xiaomi / Mi Unlock
 
@@ -20,7 +24,7 @@ NekoFlash does not operate its own account/telemetry backend.
 
 ## Files and raw diagnostics
 
-NekoFlash uses shared storage/workspace paths for firmware, imported files, logs and diagnostic exports. Raw evidence under paths such as `/sdcard/Download/NekoFlash/` can contain commands, device properties, filenames, USB identifiers and operation results.
+NekoFlash uses shared storage/workspace paths for firmware, imported files, logs and diagnostic exports. Raw evidence under paths such as `/sdcard/Download/NekoFlash/` can contain commands, device properties, filenames, USB identifiers, Wireless debugging endpoints and operation results.
 
 Shared storage is not app-private. Other applications with sufficient storage access may read those files. Do not publish raw logs/screenshots without review.
 
@@ -28,7 +32,7 @@ The project intentionally preserves full raw technical evidence for professional
 
 ## Sanitized/shareable copies
 
-Sanitized export is a separate copy. Current `main` masks structured device/account identifiers, sensitive device properties, known private/shared paths and explicit `adb -s SERIAL` / `fastboot -s SERIAL` selectors.
+Sanitized export is a separate copy. It masks structured device/account identifiers, sensitive device properties, known private/shared paths and explicit `adb -s SERIAL` / `fastboot -s SERIAL` selectors.
 
 Sanitization is defense-in-depth, not a promise that arbitrary command output can never contain a sensitive value. Review material before public sharing.
 
@@ -36,10 +40,10 @@ The signed alpha11 APK predates the post-release selector-specific sanitizer har
 
 ## ADB identity
 
-The ADB host private key is stored in app-private storage as a PKCS#8 identity. New private-key publication uses same-directory staging, owner-only permissions, fsync and atomic rename. Existing corrupt identity is preserved instead of silently rotated.
+The USB and Wireless debugging ADB host keys are separate PKCS#8 identities in app-private storage. New private-key publication uses same-directory staging, owner-only permissions, fsync and atomic rename. Existing corrupt identity is preserved instead of silently rotated.
 
 ## Permissions
 
-The application requests the Android permissions needed for USB/long-running operations, notifications, network access for optional Xiaomi login and broad storage access for the professional firmware/diagnostic workflow. It does not request contacts, SMS, microphone, camera, phone or location permissions.
+The application requests the Android permissions needed for USB/long-running operations, notifications, network access for Wireless debugging and optional Xiaomi login, and broad storage access for the professional firmware/diagnostic workflow. It does not request contacts, SMS, microphone, camera, phone or location permissions.
 
 See [docs/SECURITY.md](docs/SECURITY.md) and [docs/PROFESSIONAL_RECOVERY_POLICY.md](docs/PROFESSIONAL_RECOVERY_POLICY.md).

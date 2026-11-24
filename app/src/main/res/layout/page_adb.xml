@@ -124,30 +124,5 @@
             app:cornerRadius="11dp"
             android:minHeight="52dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnSideloadImport"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:insetTop="0dp"
-            android:insetBottom="0dp"
-            android:text="@string/layout_sideload_import"
-            android:textAllCaps="false"
-            android:textColor="@color/text_primary"
-            android:textSize="15sp"
-            android:textStyle="bold"
-            app:backgroundTint="@android:color/transparent"
-            app:cornerRadius="11dp"
-            app:strokeColor="@color/stroke"
-            app:strokeWidth="1dp" android:minHeight="48dp" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="22dp"
-            android:text="@string/layout_sideload_verdict_note"
-            android:textColor="@color/text_muted"
-            android:textSize="11sp" />
-
     </LinearLayout>
 </ScrollView>

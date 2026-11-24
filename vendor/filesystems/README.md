@@ -1,9 +1,9 @@
 # Bundled filesystem generators
 
-NekoFlash starts separate `mke2fs` (e2fsprogs 1.47.0) and `mkfs.f2fs`
-(f2fs-tools 1.16.0) processes to create private regular-file images. They are
-not linked into the Kotlin app or the USB JNI library. No root, network access,
-Termux or host `/system/bin` formatter is required at runtime.
+NekoFlash packages `mke2fs` (e2fsprogs 1.47.0) and `mkfs.f2fs`
+(f2fs-tools 1.16.0) as separate executables. Fastboot format and wipe generate
+ext4 and F2FS Android sparse images in app code. The formatter validates the
+expanded sparse image size before the existing USB plan runs.
 
 These versions match the filesystem compatibility baseline used for REV21.
 They are pinned versions, not a claim that they are the latest upstream releases.
@@ -14,11 +14,12 @@ linked into each executable; only Android platform libraries remain dynamic.
 
 The APK contains the upstream notices/licenses under `assets/filesystem-tools/`.
 The utilities retain their upstream GPL-2.0 licenses and component notices
-(including e2fsprogs LGPL/BSD/MIT components); NekoFlash's existing license does
-not relicense them. Every APK distribution produced by CI also includes
-`filesystem-tools-source.tar.gz`, containing the complete corresponding source
-archives, this manifest, and the build script. Preserve that companion archive
-when redistributing the APK. Upstream authors and notices are retained in full.
+(including e2fsprogs LGPL/BSD/MIT components). The GitHub Release and the Actions
+debug and signed build bundles include `filesystem-tools-source.tar.gz` with the
+complete corresponding source archives, manifest and build script. The APK-only
+tester kit is derived from the same Actions debug bundle. Preserve the companion
+archive when redistributing the APK. Upstream authors and notices are retained in
+full.
 
 ## Build and offline rebuild
 
@@ -43,7 +44,6 @@ across different host tool versions is not asserted.
 
 The PIE programs use `lib*.so` filenames so PackageManager installs them into
 `nativeLibraryDir`. Gradle enables legacy JNI extraction for both build types.
-The app executes only these installed files, never a cache/data-directory copy.
-It sets a private mke2fs profile and root owner explicitly. It validates the
-resulting filesystem and Android sparse image before the existing USB plan runs.
-Raw images, subprocess logs and config are removed on success, failure or cancel.
+Installed-app tests check the packaged files and the sparse images produced by
+the app. CI checks the resulting filesystems independently with `e2fsck` and
+`fsck.f2fs`.
