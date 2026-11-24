@@ -157,13 +157,13 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         start_operation = vm.split('private fun startOperation(')[1].split('/** Persist the received terminal result')[0]
         assert start_operation.count('): ServiceOwnedOperation? {') == 1
         assert '): Boolean {' not in start_operation
-        assert 'return false\\n                return null' not in start_operation
-        assert 'return true\\n            return task' not in start_operation
+        assert 'return false\n                return null' not in start_operation
+        assert 'return true\n            return task' not in start_operation
         assert start_operation.count('return task') == 1
         script_submit = vm.split('internal fun submitLocalTerminalScriptCommand(')[1].split('private suspend fun requestLocalOverwrite(')[0]
         assert script_submit.index('val started = startOperation(') < script_submit.index('if (!started) localScriptServiceOwned = false')
         assert script_submit.index(') {') < script_submit.index('if (!started) localScriptServiceOwned = false')
-        assert '} != null\\n            if (!started) localScriptServiceOwned = false' in script_submit
+        assert '} != null\n            if (!started) localScriptServiceOwned = false' in script_submit
     if vm_blob in (merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob):
         assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
     if vm_blob in (merged_local_terminal_vm_blob, *terminal_exit_vm_blobs):
