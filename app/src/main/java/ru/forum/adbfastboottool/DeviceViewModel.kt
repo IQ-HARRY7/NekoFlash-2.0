@@ -1712,7 +1712,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     localScriptServiceOwned = false
                     _localTerminalCopyProgress.postValue(null)
                 }
-            }
+            } != null
             if (!started) localScriptServiceOwned = false
             if (started) LocalTerminalAdmission.STARTED else LocalTerminalAdmission.USB_BUSY
         }
