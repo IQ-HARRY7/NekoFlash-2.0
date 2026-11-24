@@ -90,4 +90,38 @@ assert 'viewModel.cancelActiveOperation()' in usb_cancel and 'cancelLocalTermina
 assert 'import android' not in policy and 'FileOutputStream' not in policy and 'readText' not in policy
 assert 'import android' not in human
 
+# Android's string parser treats unescaped apostrophes as quote delimiters. In a
+# string-array this can poison AAPT's error reporter and surface as an NPE rather
+# than a useful resource diagnostic. Validate every text-bearing values item.
+def has_unescaped_android_apostrophe(value):
+    in_double_quote = False
+    index = 0
+    while index < len(value):
+        char = value[index]
+        if char == '\\':
+            index += 2
+            continue
+        if char == '"':
+            in_double_quote = not in_double_quote
+        elif char == "'" and not in_double_quote:
+            return True
+        index += 1
+    return False
+
+for values_file in (root/'app/src/main/res').glob('values*/*.xml'):
+    values_root = ET.parse(values_file).getroot()
+    for resource in values_root:
+        if resource.tag == 'string' or (resource.tag == 'item' and resource.attrib.get('type') == 'string'):
+            candidates = [resource]
+        elif resource.tag in ('string-array', 'array', 'plurals'):
+            candidates = [child for child in resource if child.tag == 'item']
+        else:
+            continue
+        for index, candidate in enumerate(candidates):
+            value = ''.join(candidate.itertext())
+            assert not has_unescaped_android_apostrophe(value), (
+                f'unescaped apostrophe in {values_file}:{resource.attrib.get("name", "<unnamed>")}'
+                f' item {index + 1}: {value!r}'
+            )
+
 subprocess.run(['python3', str(root/'tests/check_terminal_welcome.py')], cwd=root, check=True)

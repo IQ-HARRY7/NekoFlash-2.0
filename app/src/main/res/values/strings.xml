@@ -255,7 +255,7 @@ Not requested:
         <item>pwd</item>
         <item>ls</item>
         <item>cd &quot;ROM files&quot;</item>
-        <item>find . -name '*.img' -type f</item>
+        <item>find . -name \'*.img\' -type f</item>
         <item>cat &quot;flash log.txt&quot; | grep ERROR</item>
         <item>echo first &amp;&amp; echo second</item>
         <item>local cd &quot;ROM files&quot; forces host routing, including inside an interactive ADB shell.</item>
