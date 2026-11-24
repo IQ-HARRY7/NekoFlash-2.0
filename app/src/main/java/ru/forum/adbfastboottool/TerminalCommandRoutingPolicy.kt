@@ -6,6 +6,10 @@ package ru.forum.adbfastboottool
  * shell entrypoints and supported host commands stay on the local terminal.
  */
 internal object TerminalCommandRoutingPolicy {
+    private val adbDeviceDiagnostics = setOf(
+        "getprop", "id", "uname", "uptime", "whoami", "df", "ps", "date",
+    )
+
     sealed interface Route {
         data class Local(val command: String) : Route
         data class Adb(val command: String) : Route
@@ -60,6 +64,13 @@ internal object TerminalCommandRoutingPolicy {
         // `sh`/`bash` are explicit host-shell entrypoints. Do not reinterpret
         // command substitution, pipes, or other shell syntax as device input.
         if (explicitHostShell) return Route.Local(clean)
+
+        // Read-only Android diagnostics remain transport commands in ADB mode,
+        // even while an interactive shell session is open. They must use the
+        // managed ADB command path rather than being injected as raw shell text.
+        if (currentContext == "adb" && firstCommand in adbDeviceDiagnostics) {
+            return Route.Adb(clean)
+        }
 
         if (interactiveAdbShellActive) {
             return Route.InteractiveAdb(clean, explicitType, explicitCommand)

@@ -65,11 +65,15 @@ assert 'if (explicitAdb) return Route.Adb(explicitCommand)' in routing
 assert 'if (explicitFastboot)' in routing and 'Route.FastbootShell("sh -c ${quoteForShellArgument(clean)}")' in routing
 assert 'if (explicitHostShell) return Route.Local(clean)' in routing, 'sh/bash must never inherit a selected ADB/Fastboot tab'
 assert 'if (interactiveAdbShellActive)' in routing
+assert 'currentContext == "adb" && firstCommand in adbDeviceDiagnostics' in routing, 'ADB diagnostics must not be injected into an interactive shell'
 local_shell = (java/'LocalShell.kt').read_text()
 assert 'private fun hasUnsupportedShellSyntax' in local_shell
 assert 'if (extractShellInvocation(line) != null) return null' in local_shell
 assert 'if (extractShellInvocation(line) != null) return true' in local_shell
-assert 'args = listOf("-c", shellInvocation.command)' in local_shell
+assert 'val shellArgs = if (requiresSystemShellEvaluation(shellInvocation.command)) {' in local_shell
+assert 'listOf("-c", shellInvocation.command)' in local_shell, 'shell operators and command substitution must preserve the original command text'
+assert 'tokenize(shellInvocation.command).drop(1).map { it.value }' in local_shell, 'plain script paths and arguments must be passed directly to the configured shell'
+assert "character == '$' || character == '`' -> return true" in local_shell, 'quoted shell expansions must retain shell evaluation'
 routing_tests = (root/'app/src/test/java/ru/forum/adbfastboottool/TerminalCommandRoutingPolicyTest.kt').read_text()
 assert 'Route.Local("bash $(ls)")' in routing_tests
 assert 'resolve("local bash $(ls)", "fastboot", false)' in routing_tests

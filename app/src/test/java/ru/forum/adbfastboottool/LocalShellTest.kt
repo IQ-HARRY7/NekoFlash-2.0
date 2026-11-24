@@ -30,7 +30,9 @@ class LocalShellTest {
         val echo = shell.execute("echo \"hello world\"", noWorkspace) { false }
         val help = shell.execute("help", noWorkspace) { false }
         assertEquals(listOf("hello world"), echo?.lines)
-        assertTrue(help?.lines?.any { it.contains("echo, pwd, ls, cd, grep, cp, mv") } == true)
+        assertTrue(help?.lines?.any {
+            it == "Commands: help, echo, pwd, ls, cd, find, grep, cp, mv, mkdir, cat, rm, clear"
+        } == true)
     }
 
     @Test fun quickOutputUsesLocalizedHelpAndLeavesFileCommandsToTheWorker() {
@@ -306,12 +308,21 @@ class LocalShellTest {
         assertEquals(0, result.exitCode)
         assertTrue(result.streamedOutput)
         assertTrue(output.any { it.contains("COMMAND_SUBSTITUTION_OK") })
+
+        output.clear()
+        val quotedResult = requireNotNull(shell.execute(
+            "bash \"$(ls)\"", workspace,
+            confirmOverwrite = { false },
+            onShellOutput = output::add,
+        ))
+        assertEquals(0, quotedResult.exitCode)
+        assertTrue(output.any { it.contains("COMMAND_SUBSTITUTION_OK") })
     }
 
     @Test fun shAndBashExecuteScriptsThroughTheConfiguredSystemShell() = withWorkspace { root ->
         val home = File(root, "HOME").apply { mkdirs() }
         val script = File(home, "flash-test.sh").apply {
-            writeText("printf 'ROM_SCRIPT_OK:%s:%s\\n' \"\$HOME\" \"\$PWD\"\n")
+            writeText("printf 'ROM_SCRIPT_OK:%s:%s:%s\\n' \"\$HOME\" \"\$PWD\" \"\$1\"\n")
         }
         val shell = LocalShell(
             availableSpace = { Long.MAX_VALUE },
@@ -322,22 +333,26 @@ class LocalShellTest {
         val workspace: suspend () -> File? = { home }
         val shellLines = mutableListOf<String>()
         val shResult = requireNotNull(shell.execute(
-            "sh ${script.name}", workspace,
+            "sh ${script.name} 'sh argument with spaces'", workspace,
             confirmOverwrite = { false },
             onShellOutput = shellLines::add,
         ))
         assertEquals(0, shResult.exitCode)
         assertTrue(shResult.streamedOutput)
-        assertTrue(shellLines.any { it.contains("ROM_SCRIPT_OK:${home.absolutePath}:${home.absolutePath}") })
+        assertTrue(shellLines.any {
+            it.contains("ROM_SCRIPT_OK:${home.absolutePath}:${home.absolutePath}:sh argument with spaces")
+        })
 
         shellLines.clear()
         val bashResult = requireNotNull(shell.execute(
-            "bash ${script.name}", workspace,
+            "bash ${script.name} 'bash argument with spaces'", workspace,
             confirmOverwrite = { false },
             onShellOutput = shellLines::add,
         ))
         assertEquals(0, bashResult.exitCode)
-        assertTrue(shellLines.any { it.contains("ROM_SCRIPT_OK:${home.absolutePath}:${home.absolutePath}") })
+        assertTrue(shellLines.any {
+            it.contains("ROM_SCRIPT_OK:${home.absolutePath}:${home.absolutePath}:bash argument with spaces")
+        })
 
         val blocked = File(home, "blocked.sh").apply { writeText("su -c id\n") }
         val blockedResult = requireNotNull(shell.execute(

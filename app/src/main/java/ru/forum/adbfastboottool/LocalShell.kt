@@ -166,8 +166,9 @@ internal class LocalShell(
 
     /**
      * Detects a shell command only when sh/bash is the first executable.
-     * Its remaining text is intentionally passed to `/system/bin/sh -c` intact,
-     * so command substitution such as `bash $(ls)` is evaluated by the shell.
+     * Plain script arguments are passed directly to the configured system shell;
+     * command substitution and other shell operators retain the original text
+     * and are evaluated through `-c`.
      */
     private fun extractShellInvocation(raw: String): ShellInvocation? {
         var clean = raw.trim()
@@ -180,6 +181,31 @@ internal class LocalShell(
         if (name !in SHELL_COMMANDS) return null
         if (clean.substring(separator).isBlank()) return null
         return ShellInvocation(name, clean)
+    }
+
+    private fun requiresSystemShellEvaluation(command: String): Boolean {
+        var quote: Char? = null
+        var escaped = false
+        var index = 0
+        while (index < command.length) {
+            val character = command[index]
+            when {
+                escaped -> escaped = false
+                quote == '\'' -> if (character == '\'') quote = null
+                quote == '"' -> when {
+                    character == '\\' -> escaped = true
+                    character == '"' -> quote = null
+                    character == '$' || character == '`' -> return true
+                }
+                character == '\\' -> escaped = true
+                character == '\'' || character == '"' -> quote = character
+                command.startsWith("&&", index) || command.startsWith("||", index) ||
+                    command.startsWith("$(", index) -> return true
+                character in charArrayOf(';', '|', '>', '<', '&', '`', '$', '*', '?', '[') -> return true
+            }
+            index++
+        }
+        return false
     }
 
     private fun tokenize(line: String): List<FastbootCommandLine.Token> = try {
@@ -212,13 +238,14 @@ internal class LocalShell(
                 suspend fun workspaceRoot(): File? {
                     if (root == null) {
                         root = home ?: workspace()?.let(::normalizeFile) ?: return null
-                        require(root!!.isDirectory) { "Terminal HOME is unavailable: $root" }
-                        if (home == null) {
-                            home = root
-                            cwd = root
-                        }
                     }
-                    return root
+                    val activeRoot = root ?: return null
+                    require(activeRoot.isDirectory) { "Terminal HOME is unavailable: $activeRoot" }
+                    if (home == null) {
+                        home = activeRoot
+                        cwd = activeRoot
+                    }
+                    return activeRoot
                 }
 
                 val shellInvocation = extractShellInvocation(line)
@@ -227,9 +254,14 @@ internal class LocalShell(
                         "Local shell is disabled. Run: export NEKO_USE_DEVICE_BINARIES=1"
                     }
                     val activeRoot = workspaceRoot() ?: return@withContext null
+                    val shellArgs = if (requiresSystemShellEvaluation(shellInvocation.command)) {
+                        listOf("-c", shellInvocation.command)
+                    } else {
+                        tokenize(shellInvocation.command).drop(1).map { it.value }
+                    }
                     val shellResult = runSystemShell(
                         shellName = shellInvocation.name,
-                        args = listOf("-c", shellInvocation.command),
+                        args = shellArgs,
                         directory = cwd?.takeIf(File::isDirectory) ?: activeRoot,
                         fastbootCommand = fastbootCommand,
                         onOutput = onShellOutput,
