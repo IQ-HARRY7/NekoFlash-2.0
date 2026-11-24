@@ -49,9 +49,10 @@ assert 'textView.setSingleLine(isWelcome)' in adapter
 assert 'TextUtils.TruncateAt.END' in adapter
 assert 'stackFromEnd = false' in activity
 assert 'pinToTop = showWelcome' in activity and 'pinToBottom = !showWelcome' in activity
-assert 'pinToTop -> rvConsoleOutput.doOnNextLayout' in activity
+assert 'pinToTop -> if (!isFinishing && !isDestroyed && consoleDockController.isExpanded)' in activity
+assert 'layoutManager?.scrollToPositionWithOffset(0, 0)' in activity
 assert 'scrollOutputToBottom' not in dock
-assert 'doOnNextLayout' in activity
+assert 'doOnNextLayout' not in activity
 
 keys = {
     'terminal_welcome_title', 'terminal_welcome_subtitle',
