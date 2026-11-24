@@ -2,8 +2,8 @@ package ru.forum.adbfastboottool
 
 /**
  * Keeps host-shell input separate from explicit ADB/Fastboot commands.
- * An active interactive ADB shell remains the default destination until the
- * user explicitly selects the host with the optional `local` prefix.
+ * Only an explicit `adb` or `fastboot` prefix selects a device transport;
+ * shell entrypoints and supported host commands stay on the local terminal.
  */
 internal object TerminalCommandRoutingPolicy {
     sealed interface Route {
@@ -26,8 +26,13 @@ internal object TerminalCommandRoutingPolicy {
         val explicitLocal = clean == "local" ||
             (clean.startsWith("local") && clean.getOrNull(5)?.isWhitespace() == true)
 
-        if (explicitLocal && localCommand != null) return Route.Local(localCommand)
+        if (explicitLocal) {
+            return Route.Local(localCommand ?: clean.removePrefix("local").trimStart())
+        }
 
+        val firstCommand = clean.takeWhile { !it.isWhitespace() }
+        val explicitHostShell = firstCommand.equals("sh", ignoreCase = true) ||
+            firstCommand.equals("bash", ignoreCase = true)
         val explicitAdb = clean.startsWith("adb ", ignoreCase = true)
         val explicitFastboot = clean.startsWith("fastboot ", ignoreCase = true)
         val explicitType = when {
@@ -51,6 +56,10 @@ internal object TerminalCommandRoutingPolicy {
                 Route.Fastboot(explicitCommand)
             }
         }
+
+        // `sh`/`bash` are explicit host-shell entrypoints. Do not reinterpret
+        // command substitution, pipes, or other shell syntax as device input.
+        if (explicitHostShell) return Route.Local(clean)
 
         if (interactiveAdbShellActive) {
             return Route.InteractiveAdb(clean, explicitType, explicitCommand)

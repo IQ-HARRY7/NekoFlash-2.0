@@ -28,6 +28,25 @@ class TerminalCommandRoutingPolicyTest {
         )
     }
 
+    @Test fun explicitShellEntrypointsNeverInheritTheSelectedDeviceTransport() {
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.Local("bash $(ls)"),
+            TerminalCommandRoutingPolicy.resolve("bash $(ls)", "fastboot", false),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.Local("sh $(find . -name '*.sh')"),
+            TerminalCommandRoutingPolicy.resolve("sh $(find . -name '*.sh')", "adb", false),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.Local("bash $(ls)"),
+            TerminalCommandRoutingPolicy.resolve("bash $(ls)", "adb", true),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.Local("bash $(ls)"),
+            TerminalCommandRoutingPolicy.resolve("local bash $(ls)", "fastboot", false),
+        )
+    }
+
     @Test fun explicitAdbAndFastbootPrefixesRemainAuthoritative() {
         assertEquals(
             TerminalCommandRoutingPolicy.Route.Adb("shell ls"),
@@ -97,6 +116,19 @@ class TerminalCommandRoutingPolicyTest {
                 interactiveAdbShellActive = false,
             ),
         )
+    }
+
+    @Test fun explicitDevicePrefixesRemainDistinctFromLocalShellSyntax() {
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.Adb("shell bash $(ls)"),
+            TerminalCommandRoutingPolicy.resolve("adb shell bash $(ls)", "fastboot", false),
+        )
+        val fastbootChain = TerminalCommandRoutingPolicy.resolve(
+            "fastboot flash boot boot.img && echo \"Done, now boot into ROM\"",
+            "adb",
+            false,
+        )
+        assertTrue(fastbootChain is TerminalCommandRoutingPolicy.Route.FastbootShell)
     }
 
     @Test fun adbRemoteShellChainsRemainDeviceSide() {

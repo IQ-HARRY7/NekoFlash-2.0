@@ -103,6 +103,7 @@ internal class LocalShell(
     }
 
     fun quickOutput(line: String, help: List<String> = HELP): Output? {
+        if (extractShellInvocation(line) != null) return null
         require(!hasUnsupportedShellSyntax(line)) {
             "Redirection, command separators, command substitution and backticks are not supported."
         }
@@ -142,6 +143,7 @@ internal class LocalShell(
     }
 
     fun requiresWorkspace(line: String): Boolean {
+        if (extractShellInvocation(line) != null) return true
         val clauses = splitOutsideQuotes(line, "&&")
         return clauses.any { clause ->
             splitOutsideQuotes(clause, "|").any { stage ->
@@ -158,6 +160,26 @@ internal class LocalShell(
                 }
             }
         }
+    }
+
+    private data class ShellInvocation(val name: String, val command: String)
+
+    /**
+     * Detects a shell command only when sh/bash is the first executable.
+     * Its remaining text is intentionally passed to `/system/bin/sh -c` intact,
+     * so command substitution such as `bash $(ls)` is evaluated by the shell.
+     */
+    private fun extractShellInvocation(raw: String): ShellInvocation? {
+        var clean = raw.trim()
+        if (clean.startsWith("local") && clean.getOrNull(5)?.isWhitespace() == true) {
+            clean = clean.substring(5).trimStart()
+        }
+        val separator = clean.indexOfFirst(Char::isWhitespace)
+        if (separator <= 0) return null
+        val name = clean.substring(0, separator)
+        if (name !in SHELL_COMMANDS) return null
+        if (clean.substring(separator).isBlank()) return null
+        return ShellInvocation(name, clean)
     }
 
     private fun tokenize(line: String): List<FastbootCommandLine.Token> = try {
@@ -185,9 +207,6 @@ internal class LocalShell(
                     cancellation.check()
                 }
                 checkCancelled()
-                require(!hasUnsupportedShellSyntax(line)) {
-                    "Redirection, command separators, command substitution and backticks are not supported."
-                }
 
                 var root: File? = null
                 suspend fun workspaceRoot(): File? {
@@ -200,6 +219,33 @@ internal class LocalShell(
                         }
                     }
                     return root
+                }
+
+                val shellInvocation = extractShellInvocation(line)
+                if (shellInvocation != null) {
+                    require(deviceBinariesEnabled) {
+                        "Local shell is disabled. Run: export NEKO_USE_DEVICE_BINARIES=1"
+                    }
+                    val activeRoot = workspaceRoot() ?: return@withContext null
+                    val shellResult = runSystemShell(
+                        shellName = shellInvocation.name,
+                        args = listOf("-c", shellInvocation.command),
+                        directory = cwd?.takeIf(File::isDirectory) ?: activeRoot,
+                        fastbootCommand = fastbootCommand,
+                        onOutput = onShellOutput,
+                        checkCancelled = checkCancelled,
+                    )
+                    return@withContext Output(
+                        directory = cwd ?: activeRoot,
+                        lines = shellResult.second,
+                        deviceBinariesEnabled = deviceBinariesEnabled,
+                        exitCode = shellResult.first,
+                        streamedOutput = true,
+                    )
+                }
+
+                require(!hasUnsupportedShellSyntax(line)) {
+                    "Redirection, command separators, command substitution and backticks are not supported."
                 }
 
                 val clauses = splitOutsideQuotes(line, "&&")

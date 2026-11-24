@@ -700,6 +700,9 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev26_terminal_close">Закрыть терминал</string>
     <string name="rev26_terminal_completed">Выполнено.</string>
     <string name="rev26_terminal_copy">Копировать вывод терминала</string>
+    <string name="terminal_copy_description">Скопировать весь вывод терминала. Удерживайте, чтобы выделить весь текст.</string>
+    <string name="terminal_transcript_title">Вывод терминала</string>
+    <string name="terminal_transcript_select_hint">Нажмите и удерживайте текст, затем выберите «Выбрать всё», чтобы выделить весь вывод терминала.</string>
     <string name="rev26_terminal_copied">Вывод терминала скопирован</string>
     <string name="rev26_import_busy">Дождитесь завершения текущей операции с рабочей папкой перед импортом.</string>
     <string name="rev26_import_cancelled">Импорт отменён. Временный файл удалён.</string>

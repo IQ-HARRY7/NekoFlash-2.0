@@ -694,6 +694,9 @@ Android robot attribution: The Android robot is reproduced or modified from work
     <string name="rev26_terminal_close">Close terminal</string>
     <string name="rev26_terminal_completed">Completed.</string>
     <string name="rev26_terminal_copy">Copy terminal output</string>
+    <string name="terminal_copy_description">Copy all terminal output. Long-press to select the full transcript.</string>
+    <string name="terminal_transcript_title">Terminal transcript</string>
+    <string name="terminal_transcript_select_hint">Long-press the text and choose Select all to select the complete terminal output.</string>
     <string name="rev26_terminal_copied">Terminal output copied</string>
     <string name="rev26_import_busy">Wait for the current workspace operation to finish before importing.</string>
     <string name="rev26_import_cancelled">Import cancelled. Temporary file removed.</string>

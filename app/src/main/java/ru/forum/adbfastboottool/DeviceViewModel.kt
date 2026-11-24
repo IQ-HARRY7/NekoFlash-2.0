@@ -3044,7 +3044,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     UsbOperationAdmission.RequiredTransport.ANY_USB ->
                         "No connected ADB/Fastboot device. Connect the target over OTG."
                 }
-                log(DiagnosticLogPolicy.Level.ERROR, "ERROR: $reason Command was not sent.")
+                log(DiagnosticLogPolicy.Level.ERROR, "$reason Command was not sent.")
                 return null
             }
             val gen = operationGeneration.incrementAndGet()

@@ -22,8 +22,9 @@ assert 'writeExecutable("bash"' in local_shell_source and 'exec ' in local_shell
 assert 'val containsStagingPath = normalized.any' in (java / 'LocalShell.kt').read_text(encoding='utf-8')
 assert 'internal fun submitLocalTerminalScriptCommand(' in vm
 routing = (java / 'TerminalCommandRoutingPolicy.kt').read_text(encoding='utf-8')
-assert 'if (explicitLocal && localCommand != null) return Route.Local(localCommand)' in routing
+assert 'if (explicitLocal)' in routing and 'localCommand ?: clean.removePrefix("local").trimStart()' in routing
 assert 'if (implicitLocalCommand != null) return Route.Local(implicitLocalCommand)' in routing
+assert 'if (explicitHostShell) return Route.Local(clean)' in routing
 assert 'Route.FastbootShell("sh -c ${quoteForShellArgument(clean)}")' in routing
 assert 'interactiveAdbShellActive' in routing
 assert 'requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT' in vm

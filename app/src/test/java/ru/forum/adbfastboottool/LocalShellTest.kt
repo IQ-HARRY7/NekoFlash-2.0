@@ -277,6 +277,37 @@ class LocalShellTest {
         }
     }
 
+    @Test fun bashCommandSubstitutionRunsTheResolvedScriptFromTheCurrentDirectory() = withWorkspace { root ->
+        val home = File(root, "HOME").apply { mkdirs() }
+        val workspaceDirectory = File(home, "Download/NekoFlash").apply { mkdirs() }
+        File(workspaceDirectory, "nekoshrc.sh").writeText("printf 'COMMAND_SUBSTITUTION_OK\\n'\n")
+        val binDirectory = File(home, "bin").apply { mkdirs() }
+        File(binDirectory, "ls").apply {
+            writeText("#!/bin/sh\nprintf 'nekoshrc.sh\\n'\n")
+            setExecutable(true)
+        }
+        val shell = LocalShell(
+            availableSpace = { Long.MAX_VALUE },
+            initialHome = home,
+            initialDeviceBinariesEnabled = true,
+            shellExecutable = File("/bin/sh"),
+        )
+        val workspace: suspend () -> File? = { home }
+        assertTrue(shell.requiresWorkspace("bash $(ls)"))
+        assertNull(shell.quickOutput("bash $(ls)"))
+        assertEquals(0, shell.execute("cd Download/NekoFlash", workspace) { false }?.exitCode)
+
+        val output = mutableListOf<String>()
+        val result = requireNotNull(shell.execute(
+            "bash $(ls)", workspace,
+            confirmOverwrite = { false },
+            onShellOutput = output::add,
+        ))
+        assertEquals(0, result.exitCode)
+        assertTrue(result.streamedOutput)
+        assertTrue(output.any { it.contains("COMMAND_SUBSTITUTION_OK") })
+    }
+
     @Test fun shAndBashExecuteScriptsThroughTheConfiguredSystemShell() = withWorkspace { root ->
         val home = File(root, "HOME").apply { mkdirs() }
         val script = File(home, "flash-test.sh").apply {

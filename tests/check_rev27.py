@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""REV27 wiring guards: `adb <cmd> > file` is saved where `adb pull` saves. JVM tests cover behavior."""
+"""REV27 repository guard: ADB redirect, host/device routing, terminal transcript selection, and regression wiring."""
 from pathlib import Path
 import subprocess
 root = Path(__file__).resolve().parents[1]
@@ -59,12 +59,29 @@ assert 'Route.Local -> runLocalTerminal(raw, route.command)' in command_input
 assert 'Route.Adb -> handleAdbTerminalCommand(route.command)' in command_input
 assert 'Route.Fastboot -> handleFastbootTerminalCommand(route.command)' in command_input
 assert 'Route.FastbootShell -> runLocalTerminal(raw, route.command)' in command_input
-assert 'if (explicitLocal && localCommand != null) return Route.Local(localCommand)' in routing
+assert 'if (explicitLocal)' in routing and 'localCommand ?: clean.removePrefix("local").trimStart()' in routing
 assert 'if (implicitLocalCommand != null) return Route.Local(implicitLocalCommand)' in routing
 assert 'if (explicitAdb) return Route.Adb(explicitCommand)' in routing
 assert 'if (explicitFastboot)' in routing and 'Route.FastbootShell("sh -c ${quoteForShellArgument(clean)}")' in routing
+assert 'if (explicitHostShell) return Route.Local(clean)' in routing, 'sh/bash must never inherit a selected ADB/Fastboot tab'
 assert 'if (interactiveAdbShellActive)' in routing
-assert 'private fun hasUnsupportedShellSyntax' in (java/'LocalShell.kt').read_text()
+local_shell = (java/'LocalShell.kt').read_text()
+assert 'private fun hasUnsupportedShellSyntax' in local_shell
+assert 'if (extractShellInvocation(line) != null) return null' in local_shell
+assert 'if (extractShellInvocation(line) != null) return true' in local_shell
+assert 'args = listOf("-c", shellInvocation.command)' in local_shell
+routing_tests = (root/'app/src/test/java/ru/forum/adbfastboottool/TerminalCommandRoutingPolicyTest.kt').read_text()
+assert 'Route.Local("bash $(ls)")' in routing_tests
+assert 'resolve("local bash $(ls)", "fastboot", false)' in routing_tests
+assert 'Route.Adb("shell bash $(ls)")' in routing_tests
+assert 'Route.FastbootShell' in routing_tests
+copy_ui = main.split('private fun copyTerminalOutput()', 1)[1].split('private fun showCurrentSessionSummaryDialog()', 1)[0]
+assert 'TerminalTranscript.plainText(viewModel.terminalSnapshot())' in copy_ui
+transcript = (java/'TerminalTranscript.kt').read_text()
+assert 'ansiControlSequence.replace(it, "")' in transcript and 'lines.joinToString("\\n")' in transcript
+assert 'setTextIsSelectable(true)' in copy_ui
+assert 'terminal_transcript_select_hint' in copy_ui and 'setView(content)' in copy_ui
+assert 'showSelectableTerminalTranscript()' in main and 'setOnLongClickListener' in main
 assert 'System shell is off by default' in (java/'LocalShell.kt').read_text()
 usb_cancel = main.split('private fun requestOperationCancelFromUi()', 1)[1].split('private fun ', 1)[0]
 assert 'viewModel.cancelActiveOperation()' in usb_cancel and 'cancelLocalTerminalCommand' not in usb_cancel
