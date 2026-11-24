@@ -53,6 +53,18 @@ class TerminalCommandRoutingPolicyTest {
             TerminalCommandRoutingPolicy.resolve("adb shell ls", "fastboot", interactiveAdbShellActive = false),
         )
         assertEquals(
+            TerminalCommandRoutingPolicy.Route.Adb("devices"),
+            TerminalCommandRoutingPolicy.resolve("adb devices", "adb", interactiveAdbShellActive = true),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.InteractiveAdb("adb shell ls", "adb", "shell ls"),
+            TerminalCommandRoutingPolicy.resolve("adb shell ls", "adb", interactiveAdbShellActive = true),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.InteractiveAdb("adb SHELL", "adb", "SHELL"),
+            TerminalCommandRoutingPolicy.resolve("adb SHELL", "adb", interactiveAdbShellActive = true),
+        )
+        assertEquals(
             TerminalCommandRoutingPolicy.Route.Fastboot("flash boot boot.img"),
             TerminalCommandRoutingPolicy.resolve("fastboot flash boot boot.img", "adb", interactiveAdbShellActive = false),
         )
@@ -80,10 +92,22 @@ class TerminalCommandRoutingPolicyTest {
         )
     }
 
-    @Test fun anActiveInteractiveAdbShellKeepsBareInputOnTheDevice() {
+    @Test fun activeInteractiveAdbShellOwnsBareInputButLocalPrefixRemainsAnOverride() {
         assertEquals(
             TerminalCommandRoutingPolicy.Route.InteractiveAdb("ls", "adb", "ls"),
             TerminalCommandRoutingPolicy.resolve("ls", "adb", interactiveAdbShellActive = true),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.InteractiveAdb("echo hello", "adb", "echo hello"),
+            TerminalCommandRoutingPolicy.resolve("echo hello", "adb", interactiveAdbShellActive = true),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.Local("echo hello"),
+            TerminalCommandRoutingPolicy.resolve("local echo hello", "adb", interactiveAdbShellActive = true),
+        )
+        assertEquals(
+            TerminalCommandRoutingPolicy.Route.Local("bash $(ls)"),
+            TerminalCommandRoutingPolicy.resolve("bash $(ls)", "adb", interactiveAdbShellActive = true),
         )
     }
 

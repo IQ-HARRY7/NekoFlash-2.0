@@ -1,11 +1,21 @@
 package ru.forum.adbfastboottool
 
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TerminalWelcomeMessageTest {
+    private fun assertWrappedTextRetained(lines: List<String>, expected: String) {
+        val visibleRows = lines.filter { it.startsWith("| ") }
+            .joinToString(" ") { it.substring(2, it.length - 2).trim() }
+        var offset = 0
+        expected.split(Regex("\\s+")).filter(String::isNotEmpty).forEach { word ->
+            val index = visibleRows.indexOf(word, offset)
+            assertTrue("Missing or reordered welcome text: $word", index >= 0)
+            offset = index + word.length
+        }
+    }
+
     private fun details() = TerminalWelcomeMessage.Details(
         title = "Welcome to NekoFlash-2.0",
         subtitle = "HOST + DEVICE TERMINAL",
@@ -33,7 +43,7 @@ class TerminalWelcomeMessageTest {
     @Test fun everyWelcomeRowFitsTheFixedTerminalWidth() {
         val lines = TerminalWelcomeMessage.layout(details())
         assertTrue(lines.isNotEmpty())
-        assertTrue(lines.all { TerminalWelcomeMessage.displayWidth(it) == 48 })
+        assertTrue(lines.all { TerminalWelcomeMessage.displayWidth(it) == 37 })
     }
 
     @Test fun welcomeTitleAndHelpAreProminentWithoutListingEveryCommand() {
@@ -43,7 +53,7 @@ class TerminalWelcomeMessageTest {
         assertTrue(lines.any { it.contains("HOST = ls") })
         assertTrue(lines.any { it.contains("ADB = adb shell") })
         assertTrue(lines.any { it.contains("FASTBOOT = fastboot") })
-        assertTrue(lines.any { it.contains("shell bridge") })
+        assertTrue(lines.any { it.contains("FASTBOOT chain") })
         assertTrue(lines.any { it.contains("NEKO_USE_DEVICE_BINARIES=1") })
         assertTrue(lines.any { it.contains("NEKO_USE_DEVICE_BINARIES=0") })
         assertTrue(lines.any { it.contains("SYSTEM SHELL") && it.contains("ENABLED") })
@@ -52,13 +62,18 @@ class TerminalWelcomeMessageTest {
 
     @Test fun framedRowsRestoreEmojiAndKeepBordersAligned() {
         val lines = TerminalWelcomeMessage.layout(details())
-        val framed = lines.filter { it.startsWith("║ ") }
+        val framed = lines.filter { it.startsWith("| ") }
         assertTrue(framed.isNotEmpty())
-        assertTrue(framed.all { it.first() == '║' && it.last() == '║' })
-        assertTrue(framed.all { TerminalWelcomeMessage.displayWidth(it) == 48 })
+        assertTrue(framed.all { it.first() == '|' && it.last() == '|' })
+        assertTrue(framed.all { TerminalWelcomeMessage.displayWidth(it) == 37 })
         listOf("✨", "📱", "🧩", "📁", "🟢", "🕒", "📅", "⌂", "↗", "⚙", "↩", "🔗", "▣", "🔐", "💡", "🔄")
             .forEach { emoji -> assertTrue("Missing $emoji", lines.any { it.contains(emoji) }) }
         assertFalse(framed.any { it.contains("@ ") || it.contains("# ") || it.contains("-> ") })
+        assertWrappedTextRetained(lines, details().workspace)
+        assertWrappedTextRetained(lines, details().mixedFastboot)
+        assertWrappedTextRetained(lines, details().transport)
+        assertWrappedTextRetained(lines, details().enableCommand)
+        assertWrappedTextRetained(lines, details().disableCommand)
     }
 
     @Test fun visualRowsAreRecognizedForSemanticColouring() {
@@ -66,5 +81,6 @@ class TerminalWelcomeMessageTest {
         assertTrue(lines.all(TerminalWelcomeMessage::isWelcomeLine))
         assertFalse(TerminalWelcomeMessage.isWelcomeLine("[Local] command completed"))
         assertFalse(TerminalWelcomeMessage.isWelcomeLine("===="))
+        assertTrue(TerminalWelcomeMessage.layout(details()).filter { it.startsWith("+") }.all { it.length == 37 })
     }
 }

@@ -1,9 +1,9 @@
 package ru.forum.adbfastboottool
 
 /**
- * Keeps host-shell input separate from explicit ADB/Fastboot commands.
- * Only an explicit `adb` or `fastboot` prefix selects a device transport;
- * shell entrypoints and supported host commands stay on the local terminal.
+ * Keeps host-shell input separate from device transports.
+ * Bare host commands resolve locally outside an interactive ADB shell; while
+ * that session is active, bare input stays device-side unless explicitly forced local.
  */
 internal object TerminalCommandRoutingPolicy {
     private val adbDeviceDiagnostics = setOf(
@@ -65,6 +65,17 @@ internal object TerminalCommandRoutingPolicy {
         // command substitution, pipes, or other shell syntax as device input.
         if (explicitHostShell) return Route.Local(clean)
 
+        if (explicitAdb) {
+            val interactiveShellInput = explicitCommand.equals("shell", ignoreCase = true) ||
+                explicitCommand.startsWith("shell ", ignoreCase = true) ||
+                explicitCommand.lowercase() in INTERACTIVE_ADB_COMMANDS
+            return if (interactiveAdbShellActive && interactiveShellInput) {
+                Route.InteractiveAdb(clean, "adb", explicitCommand)
+            } else {
+                Route.Adb(explicitCommand)
+            }
+        }
+
         // Read-only Android diagnostics remain transport commands in ADB mode,
         // even while an interactive shell session is open. They must use the
         // managed ADB command path rather than being injected as raw shell text.
@@ -72,11 +83,11 @@ internal object TerminalCommandRoutingPolicy {
             return Route.Adb(clean)
         }
 
+        // An open interactive ADB shell owns bare input. `local ...` and
+        // explicit `sh`/`bash` entrypoints above remain host-side overrides.
         if (interactiveAdbShellActive) {
             return Route.InteractiveAdb(clean, explicitType, explicitCommand)
         }
-
-        if (explicitAdb) return Route.Adb(explicitCommand)
 
         if (implicitLocalCommand != null) return Route.Local(implicitLocalCommand)
 
@@ -106,6 +117,10 @@ internal object TerminalCommandRoutingPolicy {
         }
         return false
     }
+
+    private val INTERACTIVE_ADB_COMMANDS = setOf(
+        "shell-stop", "shell-exit", "shell-ctrl-c", "shell-interrupt", "shell-ctrl-d", "shell-eof",
+    )
 
     private fun quoteForShellArgument(value: String): String =
         "'${value.replace("'", "'\\''")}'"

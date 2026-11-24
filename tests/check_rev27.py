@@ -61,7 +61,9 @@ assert 'Route.Fastboot -> handleFastbootTerminalCommand(route.command)' in comma
 assert 'Route.FastbootShell -> runLocalTerminal(raw, route.command)' in command_input
 assert 'if (explicitLocal)' in routing and 'localCommand ?: clean.removePrefix("local").trimStart()' in routing
 assert 'if (implicitLocalCommand != null) return Route.Local(implicitLocalCommand)' in routing
-assert 'if (explicitAdb) return Route.Adb(explicitCommand)' in routing
+assert 'if (explicitAdb) {' in routing and 'Route.Adb(explicitCommand)' in routing
+assert 'Route.InteractiveAdb(clean, "adb", explicitCommand)' in routing
+assert 'INTERACTIVE_ADB_COMMANDS' in routing
 assert 'if (explicitFastboot)' in routing and 'Route.FastbootShell("sh -c ${quoteForShellArgument(clean)}")' in routing
 assert 'if (explicitHostShell) return Route.Local(clean)' in routing, 'sh/bash must never inherit a selected ADB/Fastboot tab'
 assert 'if (interactiveAdbShellActive)' in routing

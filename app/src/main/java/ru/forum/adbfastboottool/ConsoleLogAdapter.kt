@@ -185,10 +185,9 @@ internal class ConsoleLogAdapter(initialTextSizeSp: Float) : RecyclerView.Adapte
             val frame = R.color.terminal_welcome_frame
             color(0, line.length, R.color.terminal_welcome_text)
             when {
-                line.startsWith("╔") || line.startsWith("╚") || line.startsWith("╰") || line.startsWith("=") ->
-                    color(0, line.length, frame)
-                line.startsWith("╟") -> color(0, line.length, R.color.terminal_welcome_section)
-                line.startsWith("║ ") -> {
+                line.startsWith("+- ") -> color(0, line.length, R.color.terminal_welcome_section)
+                line.startsWith("+") -> color(0, line.length, frame)
+                line.startsWith("| ") -> {
                     color(0, 1, frame)
                     color(line.length - 1, line.length, frame)
                     val bodyStart = 2
