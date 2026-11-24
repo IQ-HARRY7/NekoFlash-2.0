@@ -1093,35 +1093,18 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val (type, cmd) = when {
-            raw.startsWith("fastboot ", ignoreCase = true) -> "fastboot" to raw.substringAfter(" ").trim()
-            raw.startsWith("adb ", ignoreCase = true) -> "adb" to raw.substringAfter(" ").trim()
-            else -> currentTab to raw
-        }
-
-        val localLine = extractLocalCommand(raw)
-        val trimmedRaw = raw.trimStart()
-        val explicitLocalPrefix = trimmedRaw == "local" ||
-            (trimmedRaw.startsWith("local") && trimmedRaw.getOrNull(5)?.isWhitespace() == true)
-        if (explicitLocalPrefix && localLine != null) {
-            runLocalTerminal(raw, localLine)
-            return
-        }
-
-        if (viewModel.isInteractiveAdbShellActive()) {
-            handleInteractiveAdbShellInput(raw, type, cmd)
-            return
-        }
-
-        if (type != "adb" && localLine != null) {
-            runLocalTerminal(raw, localLine)
-            return
-        }
-
-        when (type) {
-            "fastboot" -> handleFastbootTerminalCommand(cmd)
-            "adb" -> handleAdbTerminalCommand(cmd)
-            else -> {
+        when (val route = TerminalCommandRoutingPolicy.resolve(
+            raw = raw,
+            currentContext = currentTab,
+            interactiveAdbShellActive = viewModel.isInteractiveAdbShellActive(),
+        )) {
+            is TerminalCommandRoutingPolicy.Route.Local -> runLocalTerminal(raw, route.command)
+            is TerminalCommandRoutingPolicy.Route.Adb -> handleAdbTerminalCommand(route.command)
+            is TerminalCommandRoutingPolicy.Route.Fastboot -> handleFastbootTerminalCommand(route.command)
+            is TerminalCommandRoutingPolicy.Route.FastbootShell -> runLocalTerminal(raw, route.command)
+            is TerminalCommandRoutingPolicy.Route.InteractiveAdb ->
+                handleInteractiveAdbShellInput(raw, route.type, route.command)
+            is TerminalCommandRoutingPolicy.Route.Context -> {
                 viewModel.log("> $raw")
                 viewModel.log("⚠️ No ADB/Fastboot context selected. Enter the adb or fastboot prefix.")
             }

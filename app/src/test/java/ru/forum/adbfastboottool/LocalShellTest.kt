@@ -126,6 +126,26 @@ class LocalShellTest {
     }
 
 
+    @Test fun findSearchesHostWorkspaceWithoutFollowingLinksAndHonoursFilters() = withWorkspace { root ->
+        File(root, "boot.img").writeText("image")
+        File(root, "system.img").writeText("image")
+        File(root, "notes.txt").writeText("notes")
+        val nested = File(root, "images").apply { mkdir() }
+        File(nested, "vendor.img").writeText("image")
+        val outside = File(root.parentFile, "outside.img").apply { writeText("outside") }
+        try {
+            runCatching { Files.createSymbolicLink(File(root, "outside-link").toPath(), outside.toPath()) }
+            val shell = LocalShell(availableSpace = { Long.MAX_VALUE }, initialHome = root)
+            val workspace: suspend () -> File? = { root }
+            val allImages = shell.execute("find . -name '*.img' -type f", workspace) { false }
+            assertEquals(listOf("./boot.img", "./images/vendor.img", "./system.img"), allImages?.lines)
+            val shallow = shell.execute("find . -name '*.img' -type f -maxdepth 1", workspace) { false }
+            assertEquals(listOf("./boot.img", "./system.img"), shallow?.lines)
+        } finally {
+            outside.delete()
+        }
+    }
+
     @Test fun catAndPipelinesPassOutputBetweenCommands() = withWorkspace { root ->
         File(root, "flash.log").writeText("INFO start\nERROR boot failed\nINFO done\n")
         val shell = newShell()
@@ -227,9 +247,17 @@ class LocalShellTest {
         assertNull(extractLocalCommand("fastboot reboot"))
         assertNull(extractLocalCommand("adb shell ls"))
         assertEquals("clear", extractLocalCommand("clear"))
+        assertEquals("ls", extractLocalCommand("ls"))
+        assertEquals("pwd", extractLocalCommand("pwd"))
         assertEquals("cd /storage/emulated/0", extractLocalCommand("cd /storage/emulated/0"))
         assertEquals("sh flash_all.sh", extractLocalCommand("sh flash_all.sh"))
         assertEquals("bash flash_all_lock.sh", extractLocalCommand("bash flash_all_lock.sh"))
+        assertEquals("help", extractLocalCommand("help"))
+        assertEquals("find . -name '*.img'", extractLocalCommand("find . -name '*.img'"))
+        assertEquals("getprop ro.build.version.release", extractLocalCommand("getprop ro.build.version.release"))
+        assertEquals("ls", extractImplicitLocalCommand("ls"))
+        assertEquals("ls && pwd", extractImplicitLocalCommand("ls && pwd"))
+        assertNull(extractImplicitLocalCommand("getprop ro.build.version.release"))
         assertEquals("export NEKO_USE_DEVICE_BINARIES=1", extractLocalCommand("export NEKO_USE_DEVICE_BINARIES=1"))
     }
 

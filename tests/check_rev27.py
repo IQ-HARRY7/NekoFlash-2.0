@@ -50,12 +50,22 @@ assert stop[0].attrib.get(android_ns + 'text') == '@string/terminal_stop_button'
 terminal_cancel = main.split('findViewById<View>(R.id.btnTerminalStop).setOnClickListener {', 1)[1].split('}', 1)[0]
 assert 'if (terminalShowsLocalCommand) viewModel.cancelLocalTerminalCommand()' in terminal_cancel
 assert 'else requestOperationCancelFromUi()' in terminal_cancel
-# Explicit local commands must stay host-side even while an interactive ADB shell is active.
+# Explicit command routing keeps host shell, ADB, and Fastboot separate.
 command_input = main.split('private fun handleTerminalCommandInput', 1)[1].split('private fun handleInteractiveAdbShellInput', 1)[0]
-assert command_input.index('if (explicitLocalPrefix && localLine != null)') < command_input.index('if (viewModel.isInteractiveAdbShellActive())')
-assert 'runLocalTerminal(raw, localLine)' in command_input
-assert 'if (type != "adb" && localLine != null)' in command_input, 'ADB tab must require explicit local prefix for host aliases'
-assert 'val trimmedRaw = raw.trimStart()' in command_input and 'trimmedRaw.getOrNull(5)?.isWhitespace() == true' in command_input
+routing_path = java/'TerminalCommandRoutingPolicy.kt'
+routing = routing_path.read_text()
+assert 'TerminalCommandRoutingPolicy.resolve(' in command_input
+assert 'Route.Local -> runLocalTerminal(raw, route.command)' in command_input
+assert 'Route.Adb -> handleAdbTerminalCommand(route.command)' in command_input
+assert 'Route.Fastboot -> handleFastbootTerminalCommand(route.command)' in command_input
+assert 'Route.FastbootShell -> runLocalTerminal(raw, route.command)' in command_input
+assert 'if (explicitLocal && localCommand != null) return Route.Local(localCommand)' in routing
+assert 'if (implicitLocalCommand != null) return Route.Local(implicitLocalCommand)' in routing
+assert 'if (explicitAdb) return Route.Adb(explicitCommand)' in routing
+assert 'if (explicitFastboot)' in routing and 'Route.FastbootShell("sh -c ${quoteForShellArgument(clean)}")' in routing
+assert 'if (interactiveAdbShellActive)' in routing
+assert 'private fun hasUnsupportedShellSyntax' in (java/'LocalShell.kt').read_text()
+assert 'System shell is off by default' in (java/'LocalShell.kt').read_text()
 usb_cancel = main.split('private fun requestOperationCancelFromUi()', 1)[1].split('private fun ', 1)[0]
 assert 'viewModel.cancelActiveOperation()' in usb_cancel and 'cancelLocalTerminalCommand' not in usb_cancel
 

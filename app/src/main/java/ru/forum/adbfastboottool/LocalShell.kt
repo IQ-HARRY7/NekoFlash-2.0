@@ -2,9 +2,14 @@ package ru.forum.adbfastboottool
 
 import java.io.File
 import java.io.IOException
+import java.util.EnumSet
+import java.nio.file.FileSystems
+import java.nio.file.FileVisitResult
 import java.nio.file.Files
 import java.nio.file.LinkOption
 import java.nio.file.NoSuchFileException
+import java.nio.file.Path
+import java.nio.file.SimpleFileVisitor
 import java.nio.file.StandardCopyOption
 import java.nio.file.attribute.BasicFileAttributes
 import kotlinx.coroutines.CancellationException
@@ -125,7 +130,7 @@ internal class LocalShell(
                     else "System shell disabled and saved. App-managed terminal commands remain available."
                 ), deviceBinariesEnabled = deviceBinariesEnabled)
             }
-            in COMMANDS -> null
+            in COMMANDS, in DEVICE_DIAGNOSTIC_COMMANDS -> null
             in BLOCKED_EXECUTABLES -> null
             else -> if (deviceBinariesEnabled) null else Output(
                 cwd,
@@ -146,7 +151,7 @@ internal class LocalShell(
                 val name = tokens.firstOrNull()?.value.orEmpty()
                 val args = tokens.drop(1)
                 when (name) {
-                    "pwd", "ls", "cd", "mkdir", "cp", "mv", "rm", "sh", "bash" -> true
+                    "pwd", "ls", "cd", "find", "mkdir", "cp", "mv", "rm", "sh", "bash" -> true
                     "grep" -> args.size == 2
                     "cat" -> args.isNotEmpty()
                     else -> false
@@ -226,7 +231,7 @@ internal class LocalShell(
                         }
 
                         val needsWorkspace = when (name) {
-                            "pwd", "ls", "cd", "mkdir", "cp", "mv", "rm", "cat", "grep", "sh", "bash" -> true
+                            "pwd", "ls", "cd", "find", "mkdir", "cp", "mv", "rm", "cat", "grep", "sh", "bash" -> true
                             else -> false
                         }
                         val activeRoot = if (needsWorkspace) {
@@ -388,6 +393,10 @@ internal class LocalShell(
                 require(input == null && args.size <= 1) { "Usage: ls [path]" }
                 val item = args.firstOrNull()?.let(::path) ?: current
                 CommandResult(0, listEntries(item, checkCancelled))
+            }
+            "find" -> {
+                require(input == null) { "find does not accept pipeline input" }
+                CommandResult(0, findEntries(args, current, checkCancelled))
             }
             "grep" -> {
                 require(args.size in 1..2) { "Usage: grep TEXT [FILE] (or pipe input into grep)" }
@@ -618,6 +627,114 @@ esac
         val listed = names.take(MAX_OUTPUT_LINES).sorted()
         return if (names.size > MAX_OUTPUT_LINES) listed + "… Directory listing limited to $MAX_OUTPUT_LINES entries."
         else listed.ifEmpty { listOf("📂 (empty directory)") }
+    }
+
+    private fun findEntries(
+        args: List<FastbootCommandLine.Token>,
+        directory: File,
+        checkCancelled: () -> Unit,
+    ): List<String> {
+        var rootToken: FastbootCommandLine.Token? = null
+        var namePattern: String? = null
+        var type: Char? = null
+        var maxDepth = DEFAULT_FIND_MAX_DEPTH
+        var index = 0
+        while (index < args.size) {
+            when (val option = args[index].value) {
+                "-name" -> {
+                    namePattern = args.getOrNull(index + 1)?.value
+                        ?: throw IllegalArgumentException("Usage: find [PATH] [-name PATTERN] [-type f|d] [-maxdepth N]")
+                    index += 2
+                }
+                "-type" -> {
+                    type = args.getOrNull(index + 1)?.value?.singleOrNull()
+                        ?: throw IllegalArgumentException("find -type accepts f or d")
+                    require(type == 'f' || type == 'd') { "find -type accepts f or d" }
+                    index += 2
+                }
+                "-maxdepth" -> {
+                    maxDepth = args.getOrNull(index + 1)?.value?.toIntOrNull()
+                        ?: throw IllegalArgumentException("find -maxdepth requires a number from 0 to $MAX_FIND_DEPTH")
+                    require(maxDepth in 0..MAX_FIND_DEPTH) {
+                        "find -maxdepth must be between 0 and $MAX_FIND_DEPTH"
+                    }
+                    index += 2
+                }
+                else -> {
+                    require(!option.startsWith('-') && rootToken == null) {
+                        "Unsupported find option or extra path: $option"
+                    }
+                    rootToken = args[index]
+                    index++
+                }
+            }
+        }
+
+        val root = rootToken?.let { resolve(directory, it) } ?: directory
+        require(Files.exists(root.toPath(), LinkOption.NOFOLLOW_LINKS)) { "No such path: $root" }
+        val matcher = namePattern?.let { pattern ->
+            runCatching { FileSystems.getDefault().getPathMatcher("glob:$pattern") }
+                .getOrElse { throw IllegalArgumentException("Invalid find name pattern: $pattern", it) }
+        }
+        val rootPath = root.toPath().toAbsolutePath().normalize()
+        val displayRoot = rootToken?.value ?: "."
+        val matches = ArrayList<String>()
+        var visited = 0
+        var truncated = false
+
+        fun collect(path: Path, attributes: BasicFileAttributes) {
+            checkCancelled()
+            visited++
+            if (visited > MAX_FIND_VISITED) {
+                truncated = true
+                return
+            }
+            if (attributes.isSymbolicLink) return
+            if (type == 'f' && !attributes.isRegularFile) return
+            if (type == 'd' && !attributes.isDirectory) return
+            if (matcher != null && !matcher.matches(path.fileName ?: path)) return
+            if (matches.size == MAX_OUTPUT_LINES) {
+                truncated = true
+                return
+            }
+            val relative = rootPath.relativize(path.toAbsolutePath().normalize()).toString()
+            matches += if (relative.isEmpty()) displayRoot else File(displayRoot, relative).path
+        }
+
+        val rootAttributes = Files.readAttributes(rootPath, BasicFileAttributes::class.java, LinkOption.NOFOLLOW_LINKS)
+        if (rootAttributes.isSymbolicLink) return listOf("Symbolic links are not traversed by find.")
+        if (!rootAttributes.isDirectory) {
+            collect(rootPath, rootAttributes)
+        } else {
+            Files.walkFileTree(
+                rootPath,
+                EnumSet.noneOf(java.nio.file.FileVisitOption::class.java),
+                maxDepth,
+                object : SimpleFileVisitor<Path>() {
+                    override fun preVisitDirectory(dir: Path, attrs: BasicFileAttributes): FileVisitResult {
+                        checkCancelled()
+                        collect(dir, attrs)
+                        return if (truncated) FileVisitResult.TERMINATE else FileVisitResult.CONTINUE
+                    }
+
+                    override fun visitFile(file: Path, attrs: BasicFileAttributes): FileVisitResult {
+                        collect(file, attrs)
+                        return if (truncated) FileVisitResult.TERMINATE else FileVisitResult.CONTINUE
+                    }
+
+                    override fun visitFileFailed(file: Path, error: IOException): FileVisitResult {
+                        if (file == rootPath) throw error
+                        return FileVisitResult.SKIP_SUBTREE
+                    }
+                },
+            )
+        }
+
+        val output = matches.sorted()
+        return buildList {
+            if (output.isEmpty()) add("No matches.") else addAll(output)
+            if (truncated) add("… Search stopped at $MAX_FIND_VISITED entries or $MAX_OUTPUT_LINES results.")
+        }
     }
 
     private fun readTextLines(file: File, query: String?, checkCancelled: () -> Unit): List<String> {
@@ -967,23 +1084,26 @@ esac
         const val MAX_TEXT_PREVIEW_CHARS = 8_192
         const val MAX_TEXT_OUTPUT_CHARS = 65_536
         const val COMMAND_TIMEOUT_MS = 30_000L
+        const val DEFAULT_FIND_MAX_DEPTH = 8
+        const val MAX_FIND_DEPTH = 32
+        const val MAX_FIND_VISITED = 10_000
         val SYSTEM_PATHS = listOf(
             "/system/bin", "/system/xbin", "/system_ext/bin", "/vendor/bin",
             "/vendor/xbin", "/product/bin", "/odm/bin",
         )
-        val COMMANDS = setOf("pwd", "ls", "cd", "grep", "cp", "mv", "mkdir", "cat", "rm")
+        val COMMANDS = setOf("pwd", "ls", "cd", "find", "grep", "cp", "mv", "mkdir", "cat", "rm")
         val STATEFUL_COMMANDS = setOf("cd", "export", "clear")
         val SHELL_COMMANDS = setOf("sh", "bash")
         val BLOCKED_EXECUTABLES = setOf(
             "sh", "bash", "mksh", "ash", "dash", "zsh", "ksh", "toybox", "busybox", "su", "run-as",
         )
-        val DEVICE_DIAGNOSTIC_COMMANDS = setOf("getprop", "id", "uname", "uptime", "whoami", "df", "ps", "date")
         val TOYBOX_DIAGNOSTIC_APPLETS = setOf("id", "uname", "uptime", "df", "ps", "date")
         val SAFE_ID_OPTIONS = setOf("-u", "-g", "-G", "-n", "-r")
         val SAFE_UNAME_OPTIONS = setOf("-a", "-s", "-r", "-m", "-n", "-v", "-p", "-o")
         val HELP = listOf(
-            "Commands: echo, pwd, ls, cd, grep, cp, mv, mkdir, cat, rm, sh, bash, clear",
-            "Use 'local' for local commands; quote paths containing spaces.",
+            "Commands: help, echo, pwd, ls, cd, find, grep, cp, mv, mkdir, cat, rm, clear",
+            "Bare host commands stay here; use adb shell for the connected device.",
+            "Ambiguous diagnostics follow ADB/Fastboot context; prefix with local for host access.",
             "&& runs the next command only after success; | passes output to the next command.",
             "Paths are not workspace-confined: use absolute paths, .., or ~; access is limited by Android permissions.",
             "HOME is private; ~/Download/NekoFlash links to the public Download/NekoFlash folder when available.",
@@ -1004,11 +1124,26 @@ internal fun extractLocalCommand(raw: String): String? {
     if (first == "local") return if (separator < 0) "" else clean.substring(separator).trimStart()
     if (hasUnsupportedShellSyntax(clean)) return null
     return when (first) {
-        "echo", "clear", "pwd", "ls", "cd", "cat", "grep", "cp", "mv", "mkdir", "rm", "sh", "bash" -> clean
+        "help", "echo", "clear", "pwd", "ls", "cd", "find", "cat", "grep", "cp", "mv", "mkdir", "rm", "sh", "bash",
+        "getprop", "id", "uname", "uptime", "whoami", "df", "ps", "date" -> clean
         "export" -> clean.takeIf { it.startsWith("export NEKO_USE_DEVICE_BINARIES=") }
         else -> null
     }
 }
+
+/**
+ * Commands with both host and Android-device meanings stay in the selected ADB
+ * context unless the user explicitly forces the host with `local`.
+ */
+internal fun extractImplicitLocalCommand(raw: String): String? {
+    val command = extractLocalCommand(raw) ?: return null
+    val first = command.trimStart().takeWhile { !it.isWhitespace() }
+    return command.takeUnless { first in DEVICE_DIAGNOSTIC_COMMANDS }
+}
+
+private val DEVICE_DIAGNOSTIC_COMMANDS = setOf(
+    "getprop", "id", "uname", "uptime", "whoami", "df", "ps", "date",
+)
 
 private fun hasUnsupportedShellSyntax(line: String): Boolean {
     var quote: Char? = null
