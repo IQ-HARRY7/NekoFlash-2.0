@@ -65,7 +65,7 @@ integrated_workflows_vm_blob = 'c308da05c4846f6f308d6035e656fa9af726186e'
 # Live slot resolution, Mass Flash plan/report, and ADB session and browser follow-ups.
 workflow_followups_vm_blob = 'fdb0b9dbf32f44bdef2fc037aaa2abb221df9a3f'
 # Reviewed merge of the workflow-followups source with the EXEC-TEST terminal/ROM-script source.
-merged_workflows_terminal_vm_blob = '95048ad4e3adcd6b95c323f758b6b299526615c4'
+merged_workflows_terminal_vm_blob = 'ce79e1734ceac7e1dd6a00a1b0a7e4acdfe81658'
 workflow_followups_vm_blobs = (workflow_followups_vm_blob, merged_workflows_terminal_vm_blob)
 mass_flash_slots_vm_blobs = (mass_flash_slots_vm_blob, integrated_workflows_vm_blob)
 terminal_exit_vm_blobs = (reviewed_terminal_exit_vm_blob, integrated_workflows_vm_blob, workflow_followups_vm_blob)
@@ -154,9 +154,16 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'values[index] == "--disable-verity"' in vm
         assert 'values[index] == "--disable-verification"' in vm
         assert 'FastbootShellBridge' in vm
+        start_operation = vm.split('private fun startOperation(')[1].split('/** Persist the received terminal result')[0]
+        assert start_operation.count('): ServiceOwnedOperation? {') == 1
+        assert '): Boolean {' not in start_operation
+        assert 'return false\\n                return null' not in start_operation
+        assert 'return true\\n            return task' not in start_operation
+        assert start_operation.count('return task') == 1
         script_submit = vm.split('internal fun submitLocalTerminalScriptCommand(')[1].split('private suspend fun requestLocalOverwrite(')[0]
         assert script_submit.index('val started = startOperation(') < script_submit.index('if (!started) localScriptServiceOwned = false')
         assert script_submit.index(') {') < script_submit.index('if (!started) localScriptServiceOwned = false')
+        assert '} != null\\n            if (!started) localScriptServiceOwned = false' in script_submit
     if vm_blob in (merged_local_terminal_vm_blob, reviewed_terminal_exit_vm_blob):
         assert vm.count('requiredTransport = UsbOperationAdmission.RequiredTransport.ADB') == adb_operation_count
     if vm_blob in (merged_local_terminal_vm_blob, *terminal_exit_vm_blobs):
