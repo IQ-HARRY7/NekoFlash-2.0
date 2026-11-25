@@ -3850,7 +3850,6 @@ class MainActivity : AppCompatActivity() {
         val slotSpinner = findViewById<Spinner>(R.id.spinQuickSlot)
         val slotChoices = listOf(
             null to R.string.flash_rev7_slot_current,
-            "other" to R.string.flash_rev7_slot_other,
             "a" to R.string.flash_rev7_slot_a,
             "b" to R.string.flash_rev7_slot_b,
             "all" to R.string.flash_rev7_slot_all
