@@ -17,13 +17,15 @@ Public assets are the signed APK, its SHA-256 file and the required filesystem c
 
 ## Development snapshot
 
-### Post-PR119 stabilization — 25 November 2026 (draft, verification pending)
+### Post-PR119 stabilization — 25 November 2026 (draft PR #120, verification pending)
 
-- Contributor @IQ-HARRY7's PRs #117 and #119 are retained in main; main is `c709bc0`. PR #117 CI was green; PR #119 [run 895](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45428158557) failed one of 31 API 34 installed-app tests (`commandsAfterRotationRenderInTheBodyAndKeepTheExpandedHeader`). The missing captures were a downstream consequence.
-- Draft [PR #120](https://github.com/Ncorror/NekoFlash-2.0/pull/120) contains terminal tail-follow changes, Fastboot bridge client shutdown and its regression test, shared host flash/wipe and slot handling, USB session pinning, cancellation checks and detection of a failed Fastboot command even if the shell exits zero.
-- Standalone script `fastboot -w` and supported `-w reboot` variants reuse the existing FBE-aware host plan. Unsupported combined wipe forms are rejected before mutation rather than pretending to support them.
-- Full descendant-process cleanup, CI for the final combined head, physical ROM script flash/cancel, A/B and non-A/B tests, Wireless ADB discovery/pair/connect/reconnect, and the file-browser/mass-flash regressions remain pending.
-- PR #115 (remove the redundant Other choice in Quick Flash) remains separate and needs current-main integration/CI. Public signed Alpha15 remains unchanged. Do not mark development builds as released or physically qualified.
+- @IQ-HARRY7's PRs #117/#119 remain credited in main. PR #119 [run 895](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45428158557) failed 1/31 API 34 installed-app tests (`commandsAfterRotationRenderInTheBodyAndKeepTheExpandedHeader`); terminal follow/IME layout has been revised in draft [PR #120](https://github.com/Ncorror/NekoFlash-2.0/pull/120), but API 34 confirmation is pending.
+- PR [#115](https://github.com/Ncorror/NekoFlash-2.0/pull/115) was merged into main at `4c47c703`: the misleading **Other** choice is removed from Quick Flash, while `--slot=other` is retained for professional CLI/scripts. Its previous CI passed; new combined main testing still matters.
+- Draft PR #120 reuses the existing host preflight, resparse, FBE-aware wipe and slot resolver in script Fastboot; it also corrects `reboot:fastboot` after wiping, exact `boot_a`/other explicit targets, and `--set-active` ordering. Composed `-w` operations include supported flash/erase/reboot/boot/getvar, filesystem options, sparse limit and patched VBMeta copy.
+- System shell is opt-in and no longer inserts artificial `su`/`run-as` blockers; local external commands and redirection use Android OS permissions. A script's own exit code is authoritative; handled Fastboot failures are logged rather than forced into FAIL. Existing USB transport ownership and confirmation UI are retained.
+- Draft PR #120 includes a regression test for active bridge client shutdown, tests for host shell commands and deferred Fastboot reboot, and reviewed source integrity checks.
+- CI [run 900](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45622610499) exposed a stale source guard, fixed; [run 908](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45629194849) exposed an outdated Fastboot callback signature, fixed. CI for the final head is **not yet confirmed green**.
+- Remaining: confirm JVM/Lint/API 26 and 34/tests and APK packaging, resolve any new failures, qualify cancellation and child-process handling, and test real USB, slots, scripts and ADB Wi-Fi before changing the public signed Alpha15.
 
 The local terminal and its review are in `main` through PRs [#107](https://github.com/Ncorror/NekoFlash-2.0/pull/107), [#108](https://github.com/Ncorror/NekoFlash-2.0/pull/108) and [#110](https://github.com/Ncorror/NekoFlash-2.0/pull/110). [GitHub Actions passed on `a665837`](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45174261292).
 
