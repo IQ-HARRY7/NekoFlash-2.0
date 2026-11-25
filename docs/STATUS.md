@@ -1,6 +1,6 @@
 # NekoFlash 2.0 — current status
 
-**Updated:** 23 November 2026
+**Updated:** 25 November 2026
 
 ## Signed release
 
@@ -16,6 +16,14 @@
 Public assets are the signed APK, its SHA-256 file and the required filesystem corresponding-source archive. Alpha11 through alpha14 remain available as historical signed releases.
 
 ## Development snapshot
+
+### Post-PR119 stabilization — 25 November 2026 (draft, verification pending)
+
+- Contributor @IQ-HARRY7's PRs #117 and #119 are retained in main; main is `c709bc0`. PR #117 CI was green; PR #119 [run 895](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45428158557) failed one of 31 API 34 installed-app tests (`commandsAfterRotationRenderInTheBodyAndKeepTheExpandedHeader`). The missing captures were a downstream consequence.
+- Draft [PR #120](https://github.com/Ncorror/NekoFlash-2.0/pull/120) contains terminal tail-follow changes, Fastboot bridge client shutdown and its regression test, shared host flash/wipe and slot handling, USB session pinning, cancellation checks and detection of a failed Fastboot command even if the shell exits zero.
+- Standalone script `fastboot -w` and supported `-w reboot` variants reuse the existing FBE-aware host plan. Unsupported combined wipe forms are rejected before mutation rather than pretending to support them.
+- Full descendant-process cleanup, CI for the final combined head, physical ROM script flash/cancel, A/B and non-A/B tests, Wireless ADB discovery/pair/connect/reconnect, and the file-browser/mass-flash regressions remain pending.
+- PR #115 (remove the redundant Other choice in Quick Flash) remains separate and needs current-main integration/CI. Public signed Alpha15 remains unchanged. Do not mark development builds as released or physically qualified.
 
 The local terminal and its review are in `main` through PRs [#107](https://github.com/Ncorror/NekoFlash-2.0/pull/107), [#108](https://github.com/Ncorror/NekoFlash-2.0/pull/108) and [#110](https://github.com/Ncorror/NekoFlash-2.0/pull/110). [GitHub Actions passed on `a665837`](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45174261292).
 
