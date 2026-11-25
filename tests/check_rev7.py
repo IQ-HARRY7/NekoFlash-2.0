@@ -70,7 +70,7 @@ merged_workflows_terminal_vm_blob = 'ce79e1734ceac7e1dd6a00a1b0a7e4acdfe81658'
 localized_transport_error_vm_blob = '0425e625bbb42988a046c274aca2d28ab54b2f19'
 reviewed_kotlin_warning_cleanup_vm_blob = '928a7fc2118ac8962fbd7d8700cc56d61c4b41ff'
 # Post-PR119 reviewed script safety changes; keep all previous integrity checks.
-reviewed_script_stabilization_vm_blob = 'e43c02410f5d1040d4ce405ef575b81dc2c44ef3'
+reviewed_script_stabilization_vm_blob = '3debda44c4405fc0c0f517738f9b8a82b3e2823a'
 workflow_followups_vm_blobs = (workflow_followups_vm_blob, merged_workflows_terminal_vm_blob, localized_transport_error_vm_blob, reviewed_kotlin_warning_cleanup_vm_blob, reviewed_script_stabilization_vm_blob)
 mass_flash_slots_vm_blobs = (mass_flash_slots_vm_blob, integrated_workflows_vm_blob)
 terminal_exit_vm_blobs = (reviewed_terminal_exit_vm_blob, integrated_workflows_vm_blob, workflow_followups_vm_blob)
