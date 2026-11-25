@@ -1389,6 +1389,10 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         var index = 0
         var serial: String? = null
         var wipe = false
+        var force = false
+        var filesystemOptions = emptySet<String>()
+        var sparseLimit = 0L
+        var setActiveRequested = false
         var disableVerity = false
         var disableVerification = false
         var slot: String? = null
@@ -1402,8 +1406,29 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     index += 2
                 }
                 values[index] == "-w" -> { wipe = true; index++ }
-                values[index] == "-S" || values[index] == "-i" || values[index] == "-p" -> {
-                    return FastbootShellBridge.Result(2, listOf("❌ ${values[index]} is not implemented by NekoFlash's USB Fastboot transport; refusing to ignore it"))
+                values[index] == "-S" || values[index].startsWith("-S") -> {
+                    val raw = if (values[index] == "-S") values.getOrNull(index + 1)
+                        else values[index].substring(2)
+                    sparseLimit = try {
+                        FastbootFlashImage.parseLimit(raw ?: return FastbootShellBridge.Result(2, listOf("❌ -S needs a size")))
+                    } catch (error: IllegalArgumentException) {
+                        return FastbootShellBridge.Result(2, listOf("❌ ${error.message}"))
+                    }
+                    index += if (values[index] == "-S") 2 else 1
+                }
+                values[index] == "--fs-options" || values[index].startsWith("--fs-options=") -> {
+                    val raw = if (values[index] == "--fs-options") values.getOrNull(index + 1)
+                        else values[index].substringAfter('=')
+                    filesystemOptions = try {
+                        filesystemOptions + FastbootHostSyntax.filesystemOptions(raw
+                            ?: return FastbootShellBridge.Result(2, listOf("❌ --fs-options needs a value")))
+                    } catch (error: IllegalArgumentException) {
+                        return FastbootShellBridge.Result(2, listOf("❌ ${error.message}"))
+                    }
+                    index += if (values[index] == "--fs-options") 2 else 1
+                }
+                values[index] == "-i" || values[index] == "-p" -> {
+                    return FastbootShellBridge.Result(2, listOf("❌ ${values[index]} cannot select another USB device from this active session"))
                 }
                 values[index] == "--disable-verity" -> { disableVerity = true; index++ }
                 values[index] == "--disable-verification" -> { disableVerification = true; index++ }
@@ -1416,14 +1441,17 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     slot = values[index].substringAfter('=')
                     index++
                 }
+                values[index] == "--set-active" || values[index] == "-a" -> {
+                    setActiveRequested = true
+                    index++
+                }
                 values[index].startsWith("--set-active=") -> {
+                    setActiveRequested = true
                     setActiveOption = values[index].substringAfter('=')
                     index++
                 }
                 values[index] in setOf("--skip-reboot", "--verbose") -> index++
-                values[index] == "--force" -> {
-                    return FastbootShellBridge.Result(2, listOf("❌ ${values[index]} is not implemented; refusing to silently change Fastboot semantics"))
-                }
+                values[index] == "--force" -> { force = true; index++ }
                 else -> return FastbootShellBridge.Result(2, listOf("❌ Unsupported Fastboot option: ${values[index]}"))
             }
         }
@@ -1432,20 +1460,64 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         }
         if (command.isEmpty()) return FastbootShellBridge.Result(2, listOf("❌ fastboot: missing command"))
         val verb = command[0].lowercase(Locale.US)
-        // Never erase first and validate later. Use the shared FBE-aware plan for
-        // standalone wipe and wipe+reboot; other combined forms need a complete plan.
+        // Execute CLI combinations through the same host-plan composer used
+        // by the interactive terminal. Plan preparation precedes USB mutation.
         val wipeSteps = if (wipe) {
-            val reboot = when {
-                command == listOf("wipe") -> null
-                command == listOf("reboot") -> "reboot"
-                command == listOf("reboot", "bootloader") || command == listOf("reboot-bootloader") -> "reboot-bootloader"
-                command == listOf("reboot", "fastboot") -> "reboot:fastboot"
-                else -> return FastbootShellBridge.Result(2, listOf("❌ Combined -w command is not supported. Use a separate fastboot -w followed by the validated command. Nothing was erased."))
+            val primary = when (verb) {
+                "wipe" -> emptyList()
+                "flash" -> {
+                    val partition = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ flash needs PARTITION FILE"))
+                    val filename = command.getOrNull(2) ?: return FastbootShellBridge.Result(2, listOf("❌ flash needs PARTITION FILE"))
+                    if (command.size != 3 || !partition.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) {
+                        return FastbootShellBridge.Result(2, listOf("❌ Invalid flash arguments"))
+                    }
+                    val file = File(filename).let { if (it.isAbsolute) it else File(workingDirectory, filename) }.canonicalFile
+                    if (!file.isFile || !file.canRead()) return FastbootShellBridge.Result(1, listOf("❌ Image missing: ${file.path}"))
+                    listOf(FastbootExecutionStep.Flash(partition, file,
+                        slot.takeUnless { FlashOperationDraftPolicy.isExplicitSlotTarget(partition) }))
+                }
+                "erase" -> {
+                    val partition = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ erase needs PARTITION"))
+                    if (command.size != 2 || !partition.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) {
+                        return FastbootShellBridge.Result(2, listOf("❌ Invalid erase arguments"))
+                    }
+                    listOf(FastbootExecutionStep.PartitionCommand("erase", partition,
+                        slot.takeUnless { FlashOperationDraftPolicy.isExplicitSlotTarget(partition) }))
+                }
+                "reboot" -> {
+                    val wire = when (command) {
+                        listOf("reboot") -> "reboot"
+                        listOf("reboot", "bootloader") -> "reboot-bootloader"
+                        listOf("reboot", "fastboot") -> "reboot-fastboot"
+                        else -> return FastbootShellBridge.Result(2, listOf("❌ Invalid reboot arguments"))
+                    }
+                    listOf(FastbootExecutionStep.Raw(wire))
+                }
+                "reboot-bootloader", "reboot-edl", "continue" -> listOf(FastbootExecutionStep.Raw(verb))
+                "getvar" -> {
+                    val name = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ getvar needs KEY"))
+                    if (command.size != 2 || !name.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) {
+                        return FastbootShellBridge.Result(2, listOf("❌ Invalid getvar arguments"))
+                    }
+                    listOf(FastbootExecutionStep.Raw("getvar:$name"))
+                }
+                "set_active", "--set-active" -> {
+                    val active = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ set_active needs SLOT"))
+                    listOf(FastbootExecutionStep.SetActive(active.removePrefix("_").lowercase(Locale.US)))
+                }
+                "boot" -> {
+                    val filename = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ boot needs FILE"))
+                    if (command.size != 2) return FastbootShellBridge.Result(2, listOf("❌ Invalid boot arguments"))
+                    val file = File(filename).let { if (it.isAbsolute) it else File(workingDirectory, filename) }.canonicalFile
+                    if (!file.isFile || !file.canRead()) return FastbootShellBridge.Result(1, listOf("❌ Image missing: ${file.path}"))
+                    listOf(FastbootExecutionStep.Download(file, "boot"))
+                }
+                "flashing", "oem" -> listOf(FastbootExecutionStep.Raw(command.joinToString(" ")))
+                else -> return FastbootShellBridge.Result(2, listOf("❌ Unsupported Fastboot command: ${command.joinToString(" ")}"))
             }
-            if (slot != null || disableVerity || disableVerification || setActiveOption != null) {
-                return FastbootShellBridge.Result(2, listOf("❌ Unsupported flags with -w; nothing was erased."))
-            }
-            listOf(FastbootExecutionStep.Wipe()) + listOfNotNull(reboot?.let { FastbootExecutionStep.Raw(it) })
+            val active = setActiveOption?.removePrefix("_")?.lowercase(Locale.US) ?: slot
+            FastbootHostSyntax.compose(primary, wipe = true, options = filesystemOptions,
+                active = active, force = force, activeRequested = setActiveRequested)
         } else emptyList()
 
         if (serial != null) {
@@ -1481,7 +1553,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         try {
             if (wipe) {
                 if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
-                executeFastbootHostPlan(proto, wipeSteps, 0, checkCancelled) { error(it) }
+                executeFastbootHostPlan(proto, wipeSteps, sparseLimit, checkCancelled) { error(it) }
                 return FastbootShellBridge.Result(0, listOf("✅ Fastboot wipe plan completed"))
             }
             return when (verb) {
