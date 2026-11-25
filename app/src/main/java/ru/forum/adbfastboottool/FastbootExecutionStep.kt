@@ -18,7 +18,7 @@ internal sealed class FastbootExecutionStep {
 }
 
 internal object FastbootHostSyntax {
-    private val postWipeCommands = setOf("reboot", "reboot-bootloader", "reboot-recovery", "reboot-fastboot")
+    private val postWipeCommands = setOf("reboot", "reboot-bootloader", "reboot-recovery", "reboot-fastboot", "reboot:fastboot")
 
     private fun isDeferredByDesktopFastboot(step: FastbootExecutionStep): Boolean {
         if (step !is FastbootExecutionStep.Raw) return false
