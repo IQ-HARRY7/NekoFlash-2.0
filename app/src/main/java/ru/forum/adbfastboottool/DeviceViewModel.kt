@@ -1553,8 +1553,27 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         try {
             if (wipe) {
                 if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
-                executeFastbootHostPlan(proto, wipeSteps, sparseLimit, checkCancelled) { error(it) }
-                return FastbootShellBridge.Result(0, listOf("✅ Fastboot wipe plan completed"))
+                val vbmetaFlash = wipeSteps.filterIsInstance<FastbootExecutionStep.Flash>()
+                    .firstOrNull { it.partition in setOf("vbmeta", "vbmeta_a", "vbmeta_b") }
+                val patchedVbmeta = if ((disableVerity || disableVerification) && vbmetaFlash != null) {
+                    FastbootVbmeta.createPatchedCopy(
+                        source = vbmetaFlash.file,
+                        temporaryDirectory = File(getApplication<Application>().cacheDir, "terminal-vbmeta"),
+                        disableVerity = disableVerity,
+                        disableVerification = disableVerification,
+                    )
+                } else null
+                try {
+                    val plan = wipeSteps.map { step ->
+                        if (patchedVbmeta != null && step === vbmetaFlash) {
+                            (step as FastbootExecutionStep.Flash).copy(file = patchedVbmeta)
+                        } else step
+                    }
+                    executeFastbootHostPlan(proto, plan, sparseLimit, checkCancelled) { error(it) }
+                } finally {
+                    patchedVbmeta?.delete()
+                }
+                return FastbootShellBridge.Result(0, listOf("✅ Fastboot host plan completed"))
             }
             return when (verb) {
                 "devices" -> {
@@ -1806,9 +1825,11 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         failOperation("Local ROM script exited with status ${output.exitCode}")
                     }
                     scriptContext.ensureActive()
-                    firstFastbootFailure.get()?.let { failOperation("ROM script exited 0, but a Fastboot command failed: $it") }
+                    firstFastbootFailure.get()?.let {
+                        logLocalTerminal("⚠️ A Fastboot command returned an error earlier: $it. Script exit 0 is authoritative; a script may handle expected failures.")
+                    }
                     logLocalTerminal("✓ ${text(R.string.local_terminal_finished, elapsed())}")
-                    confirmSuccess("Local ROM script completed successfully (exit 0; no failed Fastboot commands)")
+                    confirmSuccess("Local ROM script completed (exit 0)")
                 } catch (cancelled: CancellationException) {
                     logLocalTerminal("! ${text(R.string.local_terminal_cancelled, elapsed())}")
                     throw cancelled
