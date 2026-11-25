@@ -70,7 +70,7 @@ merged_workflows_terminal_vm_blob = 'ce79e1734ceac7e1dd6a00a1b0a7e4acdfe81658'
 localized_transport_error_vm_blob = '0425e625bbb42988a046c274aca2d28ab54b2f19'
 reviewed_kotlin_warning_cleanup_vm_blob = '928a7fc2118ac8962fbd7d8700cc56d61c4b41ff'
 # Post-PR119 reviewed script safety changes; keep all previous integrity checks.
-reviewed_script_stabilization_vm_blob = 'cb28e692f8245aaba868734dd82d0304c9295a93'
+reviewed_script_stabilization_vm_blob = '287bbf0a1cf0434c74a5d47097baa86b7e596df2'
 workflow_followups_vm_blobs = (workflow_followups_vm_blob, merged_workflows_terminal_vm_blob, localized_transport_error_vm_blob, reviewed_kotlin_warning_cleanup_vm_blob, reviewed_script_stabilization_vm_blob)
 mass_flash_slots_vm_blobs = (mass_flash_slots_vm_blob, integrated_workflows_vm_blob)
 terminal_exit_vm_blobs = (reviewed_terminal_exit_vm_blob, integrated_workflows_vm_blob, workflow_followups_vm_blob)
@@ -202,6 +202,8 @@ if vm_blob in (rev51_lossless_vm_blob, rev52_admission_vm_blob, rev52_explicit_t
         assert 'listOf("userdata", "cache")' not in script
         assert 'proto.resolveSlotPartitionTargets(partition, requestedSlot)' in script
         assert 'FastbootHostSyntax.compose(primary, wipe = true' in script
+        assert 'listOf("reboot", "fastboot") -> "reboot:fastboot"' in script
+        assert 'val targetPartitions = if (explicitTarget) listOf(partition)' in script
         assert 'FastbootVbmeta.createPatchedCopy(' in script
         assert 'flashImage(proto, targetPartition, FirmwareSource.WorkspaceFile' in script
         assert 'fun beginScriptOperation()' in script and 'proto.cancel()' in script
