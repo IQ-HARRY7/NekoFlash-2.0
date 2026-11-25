@@ -44,7 +44,7 @@ class LocalShellTest {
         assertEquals(listOf("hello world"), shell.quickOutput("echo \"hello world\"", help)?.lines)
         assertNull(shell.quickOutput("mkdir \"новая папка\"", help))
         assertNull(shell.quickOutput("cat \"flash log.txt\"", help))
-        assertTrue(runCatching { shell.quickOutput("echo safe > file.txt", help) }.exceptionOrNull() is IllegalArgumentException)
+        assertNull(shell.quickOutput("echo safe > file.txt", help))
     }
 
     @Test fun quotedPathsCdPwdAndTildeStayInWorkspace() = withWorkspace { root ->
@@ -354,28 +354,39 @@ class LocalShellTest {
             it.contains("ROM_SCRIPT_OK:${home.absolutePath}:${home.absolutePath}:bash argument with spaces")
         })
 
-        val blocked = File(home, "blocked.sh").apply { writeText("su -c id\n") }
-        val blockedResult = requireNotNull(shell.execute(
-            "sh ${blocked.name}", workspace,
-            confirmOverwrite = { false },
-            onShellOutput = shellLines::add,
-        ))
-        assertEquals(126, blockedResult.exitCode)
-        assertTrue(shellLines.any { it.contains("su is blocked") })
+        // No app-created su/run-as stubs: the enabled system shell uses
+        // whatever Android provides, with normal Android permission checks.
+        assertFalse(File(home, "bin/su").exists())
+        assertFalse(File(home, "bin/run-as").exists())
     }
 
-    @Test fun privilegeEscalationAndArbitraryBinariesStayBlocked() = runBlocking {
-        val shell = newShell()
-        val noWorkspace: suspend () -> File? = { error("workspace must not be requested") }
-        shell.execute("export NEKO_USE_DEVICE_BINARIES=1", noWorkspace) { false }
-        for (command in listOf("toybox", "busybox", "su", "run-as")) {
-            val result = shell.execute("local $command", noWorkspace) { false }
-            assertTrue("$command must be blocked", result?.lines?.single()?.contains("blocked") == true)
-        }
-        val arbitrary = shell.execute("local chmod", noWorkspace) { false }
-        assertTrue(arbitrary?.lines?.single()?.contains("not allowed") == true)
-        val optionLikeProperty = runCatching { shell.execute("local getprop --", noWorkspace) { false } }.exceptionOrNull()
-        assertTrue(optionLikeProperty is IllegalArgumentException)
+    @Test fun optedInSystemShellRunsExternalCommandsAndRedirections() = withWorkspace { root ->
+        val home = File(root, "HOME").apply { mkdirs() }
+        val shell = LocalShell(
+            availableSpace = { Long.MAX_VALUE },
+            initialHome = home,
+            shellExecutable = File("/bin/sh"),
+        )
+        val workspace: suspend () -> File? = { home }
+        val enabled = requireNotNull(shell.execute("export NEKO_USE_DEVICE_BINARIES=1", workspace) { false })
+        assertEquals(0, enabled.exitCode)
+        val output = mutableListOf<String>()
+        val arbitrary = requireNotNull(shell.execute(
+            "local printf '%s\\n' UNRESTRICTED_HOST_COMMAND", workspace,
+            onShellOutput = output::add,
+            confirmOverwrite = { false },
+        ))
+        assertEquals(0, arbitrary.exitCode)
+        assertTrue(output.any { it.contains("UNRESTRICTED_HOST_COMMAND") })
+        val redirect = requireNotNull(shell.execute(
+            "local printf 'FILE_OK' > output.txt", workspace,
+            onShellOutput = output::add,
+            confirmOverwrite = { false },
+        ))
+        assertEquals(0, redirect.exitCode)
+        assertEquals("FILE_OK", File(home, "output.txt").readText())
+        assertFalse(File(home, "bin/su").exists())
+        assertFalse(File(home, "bin/run-as").exists())
     }
 
     @Test fun nonZeroExitAndUserCancellationArePreserved() = withWorkspace { root ->
