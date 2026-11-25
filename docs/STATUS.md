@@ -17,15 +17,15 @@ Public assets are the signed APK, its SHA-256 file and the required filesystem c
 
 ## Development snapshot
 
-### Post-PR119 stabilization — 25 November 2026 (draft PR #120, verification pending)
+### Post-PR119 stabilization — 25 November 2026 (merged, automated tests green)
 
-- @IQ-HARRY7's PRs #117/#119 remain credited in main. PR #119 [run 895](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45428158557) failed 1/31 API 34 installed-app tests (`commandsAfterRotationRenderInTheBodyAndKeepTheExpandedHeader`); terminal follow/IME layout has been revised in draft [PR #120](https://github.com/Ncorror/NekoFlash-2.0/pull/120), but API 34 confirmation is pending.
-- PR [#115](https://github.com/Ncorror/NekoFlash-2.0/pull/115) was merged into main at `4c47c703`: the misleading **Other** choice is removed from Quick Flash, while `--slot=other` is retained for professional CLI/scripts. Its previous CI passed; new combined main testing still matters.
-- Draft PR #120 reuses the existing host preflight, resparse, FBE-aware wipe and slot resolver in script Fastboot; it also corrects `reboot:fastboot` after wiping, exact `boot_a`/other explicit targets, and `--set-active` ordering. Composed `-w` operations include supported flash/erase/reboot/boot/getvar, filesystem options, sparse limit and patched VBMeta copy.
-- System shell is opt-in and no longer inserts artificial `su`/`run-as` blockers; local external commands and redirection use Android OS permissions. A script's own exit code is authoritative; handled Fastboot failures are logged rather than forced into FAIL. Existing USB transport ownership and confirmation UI are retained.
-- Draft PR #120 includes a regression test for active bridge client shutdown, tests for host shell commands and deferred Fastboot reboot, and reviewed source integrity checks.
-- CI [run 900](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45622610499) exposed a stale source guard, fixed; [run 908](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45629194849) exposed an outdated Fastboot callback signature, fixed. CI for the final head is **not yet confirmed green**.
-- Remaining: confirm JVM/Lint/API 26 and 34/tests and APK packaging, resolve any new failures, qualify cancellation and child-process handling, and test real USB, slots, scripts and ADB Wi-Fi before changing the public signed Alpha15.
+- @IQ-HARRY7's PRs [#117](https://github.com/Ncorror/NekoFlash-2.0/pull/117) and [#119](https://github.com/Ncorror/NekoFlash-2.0/pull/119) remain credited. [PR #120](https://github.com/Ncorror/NekoFlash-2.0/pull/120) was merged into main as `e99be4b2` after [GitHub Actions #919](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45630673826) completed **SUCCESS**: main build/JVM/Lint, installed-app API 26 and 34, and verified tester APK packaging.
+- API 34's initial run failed **before emulator startup** on a corrupted Android SDK image ZIP; rerunning only failed jobs succeeded. The earlier terminal rotation/visible-output failure from PR #119 did not recur in the successful API 34 test run.
+- [PR #115](https://github.com/Ncorror/NekoFlash-2.0/pull/115) also merged into main as `4c47c703`, removing the redundant **Other** selector from Quick Flash while retaining professional `--slot=other` CLI support.
+- PR #120 uses shared host flash preflight/resparse, FBE-aware wipe and slot resolution for script Fastboot; corrects userspace Fastboot reboot/slot order, explicit partition names, and script cancellation/session binding. It supports composed `-w` operations with host-plan options and VBMeta flags.
+- The opt-in system shell executes Android-available host commands, redirection and user scripts without extra `su`/`run-as` stubs; Android OS permissions apply. Script exit codes remain authoritative and handled Fastboot failures are logged.
+- Automated evidence does **not** establish physical USB hardware qualification. Outstanding: complete child-process cancellation, A/B and non-A/B devices, full ROM scripts/wipes, Wireless ADB discovery/pair/connect, OTG and sideload regression tests before any new public signed release.
+- Signed [Alpha15](https://github.com/Ncorror/NekoFlash-2.0/releases/tag/v6.0.0-alpha15) remains unchanged.
 
 The local terminal and its review are in `main` through PRs [#107](https://github.com/Ncorror/NekoFlash-2.0/pull/107), [#108](https://github.com/Ncorror/NekoFlash-2.0/pull/108) and [#110](https://github.com/Ncorror/NekoFlash-2.0/pull/110). [GitHub Actions passed on `a665837`](https://github.com/Ncorror/NekoFlash-2.0/actions/runs/45174261292).
 
