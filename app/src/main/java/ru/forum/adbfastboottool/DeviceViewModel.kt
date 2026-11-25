@@ -1582,7 +1582,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 return FastbootShellBridge.Result(0, listOf("✅ Fastboot host plan completed"))
             }
-            return when (verb) {
+            val outcome = when (verb) {
                 "devices" -> {
                     if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
                     val actual = currentUsbSerial() ?: proto.getVar("serialno") ?: "unknown"
@@ -1668,6 +1668,11 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         else -> verb
                     }
                     if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (setActiveRequested) {
+                        executeFastbootHostPlan(proto, listOf(
+                            FastbootExecutionStep.SetActive(setActiveOption ?: slot)
+                        ), 0, checkCancelled) { error(it) }
+                    }
                     if (proto.sendCommand(wire)) FastbootShellBridge.Result(0, listOf("✅ $wire accepted"))
                     else FastbootShellBridge.Result(1, listOf("❌ $wire failed"))
                 }
@@ -1689,6 +1694,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 else -> FastbootShellBridge.Result(2, listOf("❌ Unsupported Fastboot command: ${command.joinToString(" ")}"))
             }
+            if (setActiveRequested && outcome.exitCode == 0 &&
+                verb !in setOf("set_active", "--set-active", "reboot", "reboot-bootloader", "reboot-edl", "continue")
+            ) {
+                if (!beginScriptOperation()) return FastbootShellBridge.Result(1, outcome.lines + "❌ Fastboot is not ready to set the active slot")
+                executeFastbootHostPlan(proto, listOf(
+                    FastbootExecutionStep.SetActive(setActiveOption ?: slot)
+                ), 0, checkCancelled) { error(it) }
+                return outcome.copy(lines = outcome.lines + "✅ active slot updated")
+            }
+            return outcome
         } finally {
             localScriptFastbootActive = false
         }
