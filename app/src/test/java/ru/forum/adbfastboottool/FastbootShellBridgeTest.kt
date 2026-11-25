@@ -9,6 +9,8 @@ import java.io.OutputStreamWriter
 import java.net.InetAddress
 import java.net.Socket
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 class FastbootShellBridgeTest {
@@ -56,6 +58,34 @@ class FastbootShellBridgeTest {
                 val reader = BufferedReader(InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8))
                 assertEquals("126", reader.readLine())
                 assertTrue(reader.readLine().contains("unauthenticated"))
+            }
+        }
+    }
+
+    @Test fun closeDisconnectsAnInFlightClient() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        FastbootShellBridge { _, _ ->
+            entered.countDown()
+            release.await(5, TimeUnit.SECONDS)
+            FastbootShellBridge.Result(0)
+        }.use { bridge ->
+            Socket(InetAddress.getByName("127.0.0.1"), bridge.port).use { socket ->
+                socket.soTimeout = 2000
+                try {
+                    val writer = OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8)
+                    writer.appendLine(bridge.authToken)
+                    writer.appendLine(".")
+                    writer.appendLine("getvar")
+                    writer.appendLine("product")
+                    writer.flush()
+                    socket.shutdownOutput()
+                    assertTrue("Request never reached the bridge", entered.await(2, TimeUnit.SECONDS))
+                    bridge.close()
+                    assertEquals(-1, socket.getInputStream().read())
+                } finally {
+                    release.countDown()
+                }
             }
         }
     }

@@ -13,6 +13,7 @@ import java.security.MessageDigest
 import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
 /**
  * Loopback-only bridge used by the private `fastboot` shim installed for local
@@ -25,6 +26,7 @@ internal class FastbootShellBridge(
     data class Result(val exitCode: Int, val lines: List<String> = emptyList())
 
     private val closed = AtomicBoolean(false)
+    private val activeClient = AtomicReference<Socket?>(null)
     private val token: String = ByteArray(24).also(SecureRandom()::nextBytes).let {
         Base64.getUrlEncoder().withoutPadding().encodeToString(it)
     }
@@ -45,7 +47,14 @@ internal class FastbootShellBridge(
             } catch (_: Exception) {
                 if (closed.get()) return else continue
             }
-            runCatching { client.use(::serve) }
+            activeClient.set(client)
+            try {
+                client.use { if (!closed.get()) serve(it) }
+            } catch (_: Exception) {
+                // Closing a script interrupts any pending read/write on this client.
+            } finally {
+                activeClient.compareAndSet(client, null)
+            }
         }
     }
 
@@ -72,6 +81,7 @@ internal class FastbootShellBridge(
             arguments += line
             require(arguments.size <= MAX_ARGUMENTS) { "Too many Fastboot arguments" }
         }
+        if (closed.get()) return
         val result = runCatching { execute(arguments, workingDirectory) }
             .getOrElse { Result(1, listOf("Fastboot bridge failed: ${it.message ?: it.javaClass.simpleName}")) }
         writer.write(result.exitCode.coerceIn(0, 255).toString())
@@ -86,6 +96,7 @@ internal class FastbootShellBridge(
     override fun close() {
         if (closed.compareAndSet(false, true)) {
             runCatching { server.close() }
+            runCatching { activeClient.getAndSet(null)?.close() }
             worker.interrupt()
         }
     }

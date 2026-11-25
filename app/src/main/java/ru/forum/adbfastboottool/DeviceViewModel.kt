@@ -1368,15 +1368,31 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private fun executeScriptFastbootCommand(
         arguments: List<String>,
         workingDirectory: File,
+        proto: FastbootProtocol,
+        checkCancelled: () -> Unit,
     ): FastbootShellBridge.Result {
+        checkCancelled()
+        fun beginScriptOperation(): Boolean {
+            checkCancelled()
+            val ready = proto.beginOperation()
+            try {
+                checkCancelled()
+            } catch (error: Exception) {
+                proto.cancel()
+                throw error
+            }
+            return ready
+        }
         if (arguments.isEmpty()) return FastbootShellBridge.Result(1, listOf("❌ fastboot: missing command"))
-        val proto = fastbootProtocol
-            ?: return FastbootShellBridge.Result(1, listOf("❌ No Fastboot USB session. Connect the device in Fastboot mode first."))
         if (!proto.isConnected) return FastbootShellBridge.Result(1, listOf("❌ Fastboot USB session is not connected"))
 
         var index = 0
         var serial: String? = null
         var wipe = false
+        var force = false
+        var filesystemOptions = emptySet<String>()
+        var sparseLimit = 0L
+        var setActiveRequested = false
         var disableVerity = false
         var disableVerification = false
         var slot: String? = null
@@ -1390,8 +1406,29 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     index += 2
                 }
                 values[index] == "-w" -> { wipe = true; index++ }
-                values[index] == "-S" || values[index] == "-i" || values[index] == "-p" -> {
-                    return FastbootShellBridge.Result(2, listOf("❌ ${values[index]} is not implemented by NekoFlash's USB Fastboot transport; refusing to ignore it"))
+                values[index] == "-S" || values[index].startsWith("-S") -> {
+                    val raw = if (values[index] == "-S") values.getOrNull(index + 1)
+                        else values[index].substring(2)
+                    sparseLimit = try {
+                        FastbootFlashImage.parseLimit(raw ?: return FastbootShellBridge.Result(2, listOf("❌ -S needs a size")))
+                    } catch (error: IllegalArgumentException) {
+                        return FastbootShellBridge.Result(2, listOf("❌ ${error.message}"))
+                    }
+                    index += if (values[index] == "-S") 2 else 1
+                }
+                values[index] == "--fs-options" || values[index].startsWith("--fs-options=") -> {
+                    val raw = if (values[index] == "--fs-options") values.getOrNull(index + 1)
+                        else values[index].substringAfter('=')
+                    filesystemOptions = try {
+                        filesystemOptions + FastbootHostSyntax.filesystemOptions(raw
+                            ?: return FastbootShellBridge.Result(2, listOf("❌ --fs-options needs a value")))
+                    } catch (error: IllegalArgumentException) {
+                        return FastbootShellBridge.Result(2, listOf("❌ ${error.message}"))
+                    }
+                    index += if (values[index] == "--fs-options") 2 else 1
+                }
+                values[index] == "-i" || values[index] == "-p" -> {
+                    return FastbootShellBridge.Result(2, listOf("❌ ${values[index]} cannot select another USB device from this active session"))
                 }
                 values[index] == "--disable-verity" -> { disableVerity = true; index++ }
                 values[index] == "--disable-verification" -> { disableVerification = true; index++ }
@@ -1404,23 +1441,94 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     slot = values[index].substringAfter('=')
                     index++
                 }
+                values[index] == "--set-active" || values[index] == "-a" -> {
+                    setActiveRequested = true
+                    index++
+                }
                 values[index].startsWith("--set-active=") -> {
+                    setActiveRequested = true
                     setActiveOption = values[index].substringAfter('=')
                     index++
                 }
                 values[index] in setOf("--skip-reboot", "--verbose") -> index++
-                values[index] == "--force" -> {
-                    return FastbootShellBridge.Result(2, listOf("❌ ${values[index]} is not implemented; refusing to silently change Fastboot semantics"))
-                }
+                values[index] == "--force" -> { force = true; index++ }
                 else -> return FastbootShellBridge.Result(2, listOf("❌ Unsupported Fastboot option: ${values[index]}"))
             }
         }
-        val command = setActiveOption?.let { listOf("set_active", it) } ?: values.drop(index)
+        val commandTokens = values.drop(index)
+        val command = commandTokens.ifEmpty {
+            when {
+                setActiveRequested -> listOf("set_active") + listOfNotNull(setActiveOption ?: slot)
+                wipe -> listOf("wipe")
+                else -> emptyList()
+            }
+        }
         if (command.isEmpty()) return FastbootShellBridge.Result(2, listOf("❌ fastboot: missing command"))
         val verb = command[0].lowercase(Locale.US)
+        // Execute CLI combinations through the same host-plan composer used
+        // by the interactive terminal. Plan preparation precedes USB mutation.
+        val wipeSteps = if (wipe) {
+            val primary = when (verb) {
+                "wipe" -> emptyList()
+                "flash" -> {
+                    val partition = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ flash needs PARTITION FILE"))
+                    val filename = command.getOrNull(2) ?: return FastbootShellBridge.Result(2, listOf("❌ flash needs PARTITION FILE"))
+                    if (command.size != 3 || !partition.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) {
+                        return FastbootShellBridge.Result(2, listOf("❌ Invalid flash arguments"))
+                    }
+                    val file = File(filename).let { if (it.isAbsolute) it else File(workingDirectory, filename) }.canonicalFile
+                    if (!file.isFile || !file.canRead()) return FastbootShellBridge.Result(1, listOf("❌ Image missing: ${file.path}"))
+                    listOf(FastbootExecutionStep.Flash(partition, file,
+                        slot.takeUnless { FlashOperationDraftPolicy.isExplicitSlotTarget(partition) }))
+                }
+                "erase" -> {
+                    val partition = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ erase needs PARTITION"))
+                    if (command.size != 2 || !partition.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) {
+                        return FastbootShellBridge.Result(2, listOf("❌ Invalid erase arguments"))
+                    }
+                    listOf(FastbootExecutionStep.PartitionCommand("erase", partition,
+                        slot.takeUnless { FlashOperationDraftPolicy.isExplicitSlotTarget(partition) }))
+                }
+                "reboot" -> {
+                    val wire = when (command) {
+                        listOf("reboot") -> "reboot"
+                        listOf("reboot", "bootloader") -> "reboot-bootloader"
+                        listOf("reboot", "fastboot") -> "reboot:fastboot"
+                        else -> return FastbootShellBridge.Result(2, listOf("❌ Invalid reboot arguments"))
+                    }
+                    listOf(FastbootExecutionStep.Raw(wire))
+                }
+                "reboot-bootloader", "reboot-edl", "continue" -> listOf(FastbootExecutionStep.Raw(verb))
+                "getvar" -> {
+                    val name = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ getvar needs KEY"))
+                    if (command.size != 2 || !name.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) {
+                        return FastbootShellBridge.Result(2, listOf("❌ Invalid getvar arguments"))
+                    }
+                    listOf(FastbootExecutionStep.Raw("getvar:$name"))
+                }
+                "set_active", "--set-active" -> if (setActiveRequested && commandTokens.isEmpty()) {
+                    emptyList() // FastbootHostSyntax.compose adds the requested slot once.
+                } else {
+                    val active = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ set_active needs SLOT"))
+                    listOf(FastbootExecutionStep.SetActive(active.removePrefix("_").lowercase(Locale.US)))
+                }
+                "boot" -> {
+                    val filename = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ boot needs FILE"))
+                    if (command.size != 2) return FastbootShellBridge.Result(2, listOf("❌ Invalid boot arguments"))
+                    val file = File(filename).let { if (it.isAbsolute) it else File(workingDirectory, filename) }.canonicalFile
+                    if (!file.isFile || !file.canRead()) return FastbootShellBridge.Result(1, listOf("❌ Image missing: ${file.path}"))
+                    listOf(FastbootExecutionStep.Download(file, "boot"))
+                }
+                "flashing", "oem" -> listOf(FastbootExecutionStep.Raw(command.joinToString(" ")))
+                else -> return FastbootShellBridge.Result(2, listOf("❌ Unsupported Fastboot command: ${command.joinToString(" ")}"))
+            }
+            val active = setActiveOption?.removePrefix("_")?.lowercase(Locale.US) ?: slot
+            FastbootHostSyntax.compose(primary, wipe = true, options = filesystemOptions,
+                active = active, force = force, activeRequested = setActiveRequested)
+        } else emptyList()
 
         if (serial != null) {
-            if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+            if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
             val actual = FastbootSerialSelection.actual(currentUsbSerial()) { proto.getVar("serialno") }
             if (!FastbootSerialSelection.matches(serial, actual)) {
                 return FastbootShellBridge.Result(1, listOf("❌ Serial mismatch: requested=$serial actual=${actual ?: "unknown"}"))
@@ -1433,7 +1541,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             (verb == "oem" && subcommand !in setOf("device-info", "getvar"))
         if (lockOrWipe) {
             val summary = when {
-                wipe -> "The ROM script requested -w. This erases userdata and cache."
+                wipe -> "The ROM script requested -w. This performs a factory reset and deletes user data."
                 verb == "erase" -> "The ROM script requested erase ${command.getOrNull(1) ?: "<missing partition>"}."
                 else -> "The ROM script requested ${command.joinToString(" ")}. This changes the bootloader lock state and may permanently prevent booting an unsigned/custom ROM."
             }
@@ -1447,25 +1555,43 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
+        checkCancelled()
         localScriptFastbootActive = true
         try {
             if (wipe) {
-                for (partition in listOf("userdata", "cache")) {
-                    if (!proto.beginOperation() || !proto.sendCommand("erase:$partition")) {
-                        return FastbootShellBridge.Result(1, listOf("❌ Wipe failed at erase:$partition"))
+                if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                val vbmetaFlash = wipeSteps.filterIsInstance<FastbootExecutionStep.Flash>()
+                    .firstOrNull { it.partition in setOf("vbmeta", "vbmeta_a", "vbmeta_b") }
+                val patchedVbmeta = if ((disableVerity || disableVerification) && vbmetaFlash != null) {
+                    FastbootVbmeta.createPatchedCopy(
+                        source = vbmetaFlash.file,
+                        temporaryDirectory = File(getApplication<Application>().cacheDir, "terminal-vbmeta"),
+                        disableVerity = disableVerity,
+                        disableVerification = disableVerification,
+                    )
+                } else null
+                try {
+                    val plan = wipeSteps.map { step ->
+                        if (patchedVbmeta != null && step === vbmetaFlash) {
+                            (step as FastbootExecutionStep.Flash).copy(file = patchedVbmeta)
+                        } else step
                     }
+                    executeFastbootHostPlan(proto, plan, sparseLimit, checkCancelled) { error(it) }
+                } finally {
+                    patchedVbmeta?.delete()
                 }
+                return FastbootShellBridge.Result(0, listOf("✅ Fastboot host plan completed"))
             }
-            return when (verb) {
+            val outcome = when (verb) {
                 "devices" -> {
-                    if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
                     val actual = currentUsbSerial() ?: proto.getVar("serialno") ?: "unknown"
                     FastbootShellBridge.Result(0, listOf("$actual	fastboot"))
                 }
                 "getvar" -> {
                     val key = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ getvar requires a variable name"))
                     if (!key.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) return FastbootShellBridge.Result(2, listOf("❌ Invalid getvar name: $key"))
-                    if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
                     if (key.equals("all", ignoreCase = true)) {
                         val snapshot = proto.getVarAll() ?: return FastbootShellBridge.Result(1, listOf("❌ getvar all failed or returned an incomplete response"))
                         if (!snapshot.complete || !snapshot.finalStatus.equals("OKAY", true)) {
@@ -1483,35 +1609,21 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     val imagePath = command.getOrNull(2) ?: return FastbootShellBridge.Result(2, listOf("❌ flash requires PARTITION FILE"))
                     if (command.size != 3) return FastbootShellBridge.Result(2, listOf("❌ Unsupported extra arguments for fastboot flash"))
                     val requestedSlot = slot?.removePrefix("_")?.lowercase(Locale.US)
-                    val actualSlot = when (requestedSlot) {
-                        null -> null
-                        "a", "b" -> requestedSlot
-                        "other" -> {
-                            if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready while resolving --slot=other"))
-                            val currentSlot = proto.getVar("current-slot")?.trim()?.removePrefix("_")?.lowercase(Locale.US)
-                            if (currentSlot !in setOf("a", "b")) return FastbootShellBridge.Result(1, listOf("❌ Cannot resolve --slot=other: bootloader did not report current-slot a/b"))
-                            if (currentSlot == "a") "b" else "a"
-                        }
-                        "all" -> "all"
-                        else -> return FastbootShellBridge.Result(2, listOf("❌ Invalid --slot value: $requestedSlot"))
+                    if (requestedSlot != null && requestedSlot !in setOf("all", "other") &&
+                        !(requestedSlot.length == 1 && requestedSlot[0] in 'a'..'z')) {
+                        return FastbootShellBridge.Result(2, listOf("❌ Invalid --slot value: $requestedSlot"))
                     }
                     val image = File(imagePath).let { if (it.isAbsolute) it else File(workingDirectory, imagePath) }.canonicalFile
                     if (!image.isFile || !image.canRead()) return FastbootShellBridge.Result(1, listOf("❌ Image file is missing or unreadable: ${image.path}"))
-                    val targetPartitions = when (actualSlot) {
-                        "all" -> {
-                            if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready while resolving --slot=all"))
-                            val hasSlots = proto.getVar("has-slot:$partition")?.trim()?.equals("yes", true) == true
-                            if (hasSlots) listOf("${partition}_a", "${partition}_b") else listOf(partition)
-                        }
-                        null -> listOf(partition)
-                        else -> if (partition.endsWith("_a") || partition.endsWith("_b")) {
-                            if (partition.endsWith("_$actualSlot")) listOf(partition)
-                            else return FastbootShellBridge.Result(2, listOf("❌ Partition $partition conflicts with --slot=$actualSlot"))
-                        } else listOf("${partition}_$actualSlot")
-                    }
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    val explicitTarget = FlashOperationDraftPolicy.isExplicitSlotTarget(partition)
+                    // Exact partition names win over --slot, consistent with Quick/Mass Flash.
+                    val targetPartitions = if (explicitTarget) listOf(partition)
+                    else proto.resolveSlotPartitionTargets(partition, requestedSlot)
+                        ?: return FastbootShellBridge.Result(1, listOf("❌ Cannot resolve Fastboot targets for $partition"))
                     val lines = mutableListOf<String>()
                     for (targetPartition in targetPartitions) {
-                        if (!proto.beginOperation()) return FastbootShellBridge.Result(1, lines + "❌ Fastboot session is not ready before flash:$targetPartition")
+                        if (!beginScriptOperation()) return FastbootShellBridge.Result(1, lines + "❌ Fastboot session is not ready before flash:$targetPartition")
                         val patchedVbmeta = if (
                             (disableVerity || disableVerification) &&
                             targetPartition in setOf("vbmeta", "vbmeta_a", "vbmeta_b")
@@ -1524,7 +1636,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                             )
                         } else null
                         val result = try {
-                            proto.flashPartitionDetailed(targetPartition, patchedVbmeta ?: image)
+                            flashImage(proto, targetPartition, FirmwareSource.WorkspaceFile(patchedVbmeta ?: image), checkCancelled = checkCancelled)
                         } finally {
                             patchedVbmeta?.delete()
                         }
@@ -1537,18 +1649,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 "erase" -> {
                     val partition = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ erase requires a partition"))
                     if (!partition.matches(Regex("[A-Za-z0-9_.:-]{1,128}"))) return FastbootShellBridge.Result(2, listOf("❌ Invalid partition name: $partition"))
-                    if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
                     if (command.size != 2) return FastbootShellBridge.Result(2, listOf("❌ Unsupported extra arguments for erase"))
                     if (proto.sendCommand("erase:$partition")) FastbootShellBridge.Result(0, listOf("✅ erased $partition"))
                     else FastbootShellBridge.Result(1, listOf("❌ erase $partition failed"))
                 }
                 "set_active", "--set-active" -> {
-                    val activeSlot = command.getOrNull(1)?.removePrefix("_")?.lowercase(Locale.US)
-                        ?: return FastbootShellBridge.Result(2, listOf("❌ set_active requires a or b"))
-                    if (activeSlot !in setOf("a", "b")) return FastbootShellBridge.Result(2, listOf("❌ Invalid active slot: $activeSlot"))
-                    if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
-                    if (proto.sendCommand("set_active:$activeSlot")) FastbootShellBridge.Result(0, listOf("✅ active slot set to $activeSlot"))
-                    else FastbootShellBridge.Result(1, listOf("❌ set_active:$activeSlot failed"))
+                    val active = command.getOrNull(1)?.removePrefix("_")?.lowercase(Locale.US)
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    executeFastbootHostPlan(proto, listOf(FastbootExecutionStep.SetActive(active)), 0, checkCancelled) { error(it) }
+                    FastbootShellBridge.Result(0, listOf("✅ active slot updated through shared Fastboot host plan"))
                 }
                 "reboot", "reboot-bootloader", "reboot-edl", "continue" -> {
                     val wire = when {
@@ -1557,7 +1667,12 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         verb == "reboot" && command.size > 1 -> return FastbootShellBridge.Result(2, listOf("❌ Unsupported reboot target: ${command.drop(1).joinToString(" ")}"))
                         else -> verb
                     }
-                    if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (setActiveRequested) {
+                        executeFastbootHostPlan(proto, listOf(
+                            FastbootExecutionStep.SetActive(setActiveOption ?: slot)
+                        ), 0, checkCancelled) { error(it) }
+                    }
                     if (proto.sendCommand(wire)) FastbootShellBridge.Result(0, listOf("✅ $wire accepted"))
                     else FastbootShellBridge.Result(1, listOf("❌ $wire failed"))
                 }
@@ -1566,19 +1681,29 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     if (request.any { it.code !in 32..126 } || request.length > 256) {
                         return FastbootShellBridge.Result(2, listOf("❌ Invalid Fastboot command arguments"))
                     }
-                    if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
                     if (proto.runTerminalCommand(request)) FastbootShellBridge.Result(0, listOf("✅ $request"))
                     else FastbootShellBridge.Result(1, listOf("❌ $request failed"))
                 }
                 "boot" -> {
                     val imagePath = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ boot requires an image file"))
                     val image = File(imagePath).let { if (it.isAbsolute) it else File(workingDirectory, imagePath) }.canonicalFile
-                    if (!proto.beginOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
+                    if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
                     if (proto.downloadAndRun(image, "boot")) FastbootShellBridge.Result(0, listOf("✅ boot ${image.name}"))
                     else FastbootShellBridge.Result(1, listOf("❌ boot ${image.name} failed"))
                 }
                 else -> FastbootShellBridge.Result(2, listOf("❌ Unsupported Fastboot command: ${command.joinToString(" ")}"))
             }
+            if (setActiveRequested && outcome.exitCode == 0 &&
+                verb !in setOf("set_active", "--set-active", "reboot", "reboot-bootloader", "reboot-edl", "continue")
+            ) {
+                if (!beginScriptOperation()) return FastbootShellBridge.Result(1, outcome.lines + "❌ Fastboot is not ready to set the active slot")
+                executeFastbootHostPlan(proto, listOf(
+                    FastbootExecutionStep.SetActive(setActiveOption ?: slot)
+                ), 0, checkCancelled) { error(it) }
+                return outcome.copy(lines = outcome.lines + "✅ active slot updated")
+            }
+            return outcome
         } finally {
             localScriptFastbootActive = false
         }
@@ -1587,6 +1712,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     internal fun submitLocalTerminalCommand(raw: String, command: String, workspace: File?): LocalTerminalAdmission =
         launchLocalTerminalCommand(localTerminalScope) { cancellation ->
             logLocalTerminal("${localShell.prompt()} $raw")
+            val localFastboot = fastbootProtocol
+            val localSession = connectionGeneration.get()
+            val localContext = kotlinx.coroutines.currentCoroutineContext()
+            val checkLocalSession = {
+                localContext.ensureActive()
+                cancellation.check()
+                check(localFastboot === fastbootProtocol && localSession == connectionGeneration.get()) {
+                    "Fastboot session changed while running the local command"
+                }
+            }
             val startedAt = SystemClock.elapsedRealtime()
             var lastProgressAt: Long? = null
             fun elapsed(): String {
@@ -1610,7 +1745,18 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     },
                     confirmOverwrite = ::requestLocalOverwrite,
                     confirmDelete = ::requestLocalDelete,
-                    fastbootCommand = ::executeScriptFastbootCommand,
+                    fastbootCommand = { arguments, directory ->
+                        val proto = localFastboot
+                        if (proto == null || !proto.isConnected) {
+                            FastbootShellBridge.Result(1, listOf("❌ No Fastboot device connected"))
+                        } else try {
+                            executeScriptFastbootCommand(arguments, directory, proto, checkLocalSession)
+                        } catch (_: CancellationException) {
+                            FastbootShellBridge.Result(130, listOf("Fastboot command cancelled"))
+                        } catch (error: Exception) {
+                            FastbootShellBridge.Result(1, listOf(error.message ?: error.javaClass.simpleName))
+                        }
+                    },
                     onShellOutput = ::logLocalTerminal,
                 )
                 when {
@@ -1657,6 +1803,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 prepareFastbootSession = false,
                 requiredTransport = UsbOperationAdmission.RequiredTransport.FASTBOOT,
             ) {
+                val proto = fastbootProtocol ?: failOperation("Fastboot session disconnected")
+                val scriptContext = kotlinx.coroutines.currentCoroutineContext()
+                val scriptGeneration = connectionGeneration.get()
+                val firstFastbootFailure = AtomicReference<String?>(null)
+                val checkScriptSession = {
+                    scriptContext.ensureActive()
+                    check(proto === fastbootProtocol && scriptGeneration == connectionGeneration.get() && proto.isConnected) {
+                        "Fastboot session changed during ROM script"
+                    }
+                }
                 localScriptExecutionActive = true
                 val startedAt = SystemClock.elapsedRealtime()
                 fun elapsed(): String {
@@ -1681,7 +1837,19 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         },
                         confirmOverwrite = ::requestLocalOverwrite,
                         confirmDelete = ::requestLocalDelete,
-                        fastbootCommand = ::executeScriptFastbootCommand,
+                        fastbootCommand = { arguments, directory ->
+                            val result = try {
+                                executeScriptFastbootCommand(arguments, directory, proto, checkScriptSession)
+                            } catch (cancelled: CancellationException) {
+                                FastbootShellBridge.Result(130, listOf("Fastboot script cancelled"))
+                            } catch (error: Exception) {
+                                FastbootShellBridge.Result(1, listOf(error.message ?: error.javaClass.simpleName))
+                            }
+                            if (result.exitCode != 0) {
+                                firstFastbootFailure.compareAndSet(null, result.lines.firstOrNull() ?: "Fastboot exit ${result.exitCode}")
+                            }
+                            result
+                        },
                         onShellOutput = ::logLocalTerminal,
                     ) ?: failOperation(text(R.string.local_terminal_workspace_unavailable))
 
@@ -1696,8 +1864,12 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         logLocalTerminal("✕ ${text(R.string.local_terminal_failed, elapsed(), text(R.string.local_terminal_exit_code, output.exitCode))}")
                         failOperation("Local ROM script exited with status ${output.exitCode}")
                     }
+                    scriptContext.ensureActive()
+                    firstFastbootFailure.get()?.let {
+                        logLocalTerminal("⚠️ A Fastboot command returned an error earlier: $it. Script exit 0 is authoritative; a script may handle expected failures.")
+                    }
                     logLocalTerminal("✓ ${text(R.string.local_terminal_finished, elapsed())}")
-                    confirmSuccess("Local ROM script completed successfully (exit 0)")
+                    confirmSuccess("Local ROM script completed (exit 0)")
                 } catch (cancelled: CancellationException) {
                     logLocalTerminal("! ${text(R.string.local_terminal_cancelled, elapsed())}")
                     throw cancelled
@@ -1864,43 +2036,55 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
             val proto = fastbootProtocol ?: failOperation(text(R.string.error_no_fastboot))
             if (!proto.isConnected) failOperation(text(R.string.error_no_fastboot))
             val context = kotlinx.coroutines.currentCoroutineContext()
-            val cache = getApplication<Application>().cacheDir
-            val needsImages = steps.any { it is FastbootExecutionStep.Format || it is FastbootExecutionStep.Wipe || it is FastbootExecutionStep.WipeSuper }
-            // Admission is exclusive. Remove private images left by a killed process before creating this job's directory.
-            if (needsImages) cache.listFiles()?.filter { it.isDirectory && it.name.matches(Regex("fastboot-host-[0-9a-f-]{36}")) }
-                ?.forEach { context.ensureActive(); check(it.deleteRecursively()) { "Could not remove interrupted Fastboot images" } }
-            val directory = if (needsImages) File(cache, "fastboot-host-${UUID.randomUUID()}") else cache
-            if (needsImages) check(directory.mkdirs()) { "Could not create private Fastboot image workspace" }
-            try {
-                val port = object : FastbootPlanPort {
-                    override fun getVar(name: String) = proto.getVar(name)
-                    override fun downloadLimitBytes() = proto.hostDownloadLimitBytes()
-                    override fun targets(partition: String, slot: String?) = proto.resolveSlotPartitionTargets(partition, slot)
-                        ?: failOperation(text(R.string.rev13_fastboot_slot_error, partition))
-                    override fun command(command: String) = proto.runTerminalCommand(command)
-                    override fun flash(partition: String, file: File) {
-                        val result = flashImage(proto, partition, FirmwareSource.WorkspaceFile(file), sparseLimit) { context.ensureActive() }
-                        if (!result.success) failOperation(formatFlashFailure(partition, result))
-                    }
-                    override fun download(file: File, command: String) {
-                        if (!proto.downloadAndRun(file, command)) failOperation(text(R.string.rev11_fastboot_download_failed, command))
-                    }
-                    override fun fetch(partition: String, file: File) {
-                        if (!proto.fetchPartition(partition, file)) failOperation("Fastboot fetch failed: $partition")
-                    }
-                    override fun inspect(partition: String) {
-                        if (proto.inspectLogicalPartition(partition) == null) failOperation(text(R.string.rev11_fastboot_logical_info_failed, partition))
-                    }
+            executeFastbootHostPlan(proto, steps, sparseLimit, { context.ensureActive() }, ::failOperation)
+        }
+    }
+
+
+    /** One shared preflight/formatter/USB execution path for interactive and scripted plans. */
+    private fun executeFastbootHostPlan(
+        proto: FastbootProtocol,
+        steps: List<FastbootExecutionStep>,
+        sparseLimit: Long,
+        checkCancelled: () -> Unit,
+        fail: (String) -> Nothing,
+    ) {
+        val cache = getApplication<Application>().cacheDir
+        val needsImages = steps.any { it is FastbootExecutionStep.Format || it is FastbootExecutionStep.Wipe || it is FastbootExecutionStep.WipeSuper }
+        // Admission is exclusive. Remove private images left by a killed process before creating this job's directory.
+        if (needsImages) cache.listFiles()?.filter { it.isDirectory && it.name.matches(Regex("fastboot-host-[0-9a-f-]{36}")) }
+            ?.forEach { checkCancelled(); check(it.deleteRecursively()) { "Could not remove interrupted Fastboot images" } }
+        val directory = if (needsImages) File(cache, "fastboot-host-${UUID.randomUUID()}") else cache
+        if (needsImages) check(directory.mkdirs()) { "Could not create private Fastboot image workspace" }
+        try {
+            val port = object : FastbootPlanPort {
+                override fun getVar(name: String) = proto.getVar(name)
+                override fun downloadLimitBytes() = proto.hostDownloadLimitBytes()
+                override fun targets(partition: String, slot: String?) = proto.resolveSlotPartitionTargets(partition, slot)
+                    ?: fail(text(R.string.rev13_fastboot_slot_error, partition))
+                override fun command(command: String) = proto.runTerminalCommand(command)
+                override fun flash(partition: String, file: File) {
+                    val result = flashImage(proto, partition, FirmwareSource.WorkspaceFile(file), sparseLimit) { checkCancelled() }
+                    if (!result.success) fail(formatFlashFailure(partition, result))
                 }
-                val formatter = FastbootFilesystemFormatter(
-                    BundledFilesystemTools.fromDirectory(File(getApplication<Application>().applicationInfo.nativeLibraryDir)),
-                    nextData = AndroidImageExtents::nextData, log = ::log)
-                FastbootPlanExecutor(port, formatter, directory, { context.ensureActive() }, ::log, sparseLimit) { detail ->
-                    postOperationProgress(OperationProgress(text(R.string.notif_fastboot_command), -1, detail))
-                }.run(steps)
-            } finally {
-                if (needsImages && !directory.deleteRecursively()) log("Could not remove temporary Fastboot images: ${directory.name}")
+                override fun download(file: File, command: String) {
+                    if (!proto.downloadAndRun(file, command)) fail(text(R.string.rev11_fastboot_download_failed, command))
+                }
+                override fun fetch(partition: String, file: File) {
+                    if (!proto.fetchPartition(partition, file)) fail("Fastboot fetch failed: $partition")
+                }
+                override fun inspect(partition: String) {
+                    if (proto.inspectLogicalPartition(partition) == null) fail(text(R.string.rev11_fastboot_logical_info_failed, partition))
+                }
             }
+            val formatter = FastbootFilesystemFormatter(
+                BundledFilesystemTools.fromDirectory(File(getApplication<Application>().applicationInfo.nativeLibraryDir)),
+                nextData = AndroidImageExtents::nextData, log = ::log)
+            FastbootPlanExecutor(port, formatter, directory, { checkCancelled() }, ::log, sparseLimit) { detail ->
+                postOperationProgress(OperationProgress(text(R.string.notif_fastboot_command), -1, detail))
+            }.run(steps)
+        } finally {
+            if (needsImages && !directory.deleteRecursively()) log("Could not remove temporary Fastboot images: ${directory.name}")
         }
     }
 

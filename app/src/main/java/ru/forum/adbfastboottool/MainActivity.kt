@@ -131,6 +131,7 @@ class MainActivity : AppCompatActivity() {
     private var terminalShowsLocalCommand = false
     private var terminalWelcomePending = true
     private var followConsoleAfterCommand = false
+    private var consoleFollowTail = false
     private var localOverwriteDialog: androidx.appcompat.app.AlertDialog? = null
     private var displayedLocalOverwrite: DeviceViewModel.LocalOverwriteRequest? = null
     private var localDeleteDialog: androidx.appcompat.app.AlertDialog? = null
@@ -285,6 +286,25 @@ class MainActivity : AppCompatActivity() {
             }
             adapter = consoleLogAdapter
             itemAnimator = null
+            addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                        consoleFollowTail = false
+                        followConsoleAfterCommand = false
+                    } else if (newState == RecyclerView.SCROLL_STATE_IDLE &&
+                        !recyclerView.canScrollVertically(1) && !hasSelectedConsoleText()
+                    ) {
+                        consoleFollowTail = true
+                    }
+                }
+            })
+            addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+                if (bottom - top != oldBottom - oldTop && consoleFollowTail &&
+                    ::consoleDockController.isInitialized && consoleDockController.isExpanded
+                ) {
+                    scrollConsoleToBottom()
+                }
+            }
         }
         etCommand = findViewById(R.id.etCommand)
         etCommand.configurePty(
@@ -1088,6 +1108,7 @@ class MainActivity : AppCompatActivity() {
         val raw = etCommand.text.toString().trim()
         if (raw.isEmpty()) return
         followConsoleAfterCommand = true
+        consoleFollowTail = true
         // Terminal commands never inherit a pending GUI Operation Center
         // request (for example after a rejected GUI action with no USB).
         autoShowGuiOperation = false
@@ -5474,9 +5495,10 @@ class MainActivity : AppCompatActivity() {
         val layoutManager = rvConsoleOutput.layoutManager as? LinearLayoutManager
         val keepPinnedToBottom = !pinToTop && ConsoleAutoFollowPolicy.followOutput(
             explicitlyRequested = pinToBottom || followAfterCommand,
-            currentlyAtBottom = !rvConsoleOutput.canScrollVertically(1),
+            currentlyAtBottom = consoleFollowTail || !rvConsoleOutput.canScrollVertically(1),
             selectingText = hasSelectedConsoleText(),
         )
+        consoleFollowTail = keepPinnedToBottom
         val firstVisiblePosition = layoutManager?.findFirstVisibleItemPosition() ?: -1
         val firstVisibleOffset = if (firstVisiblePosition >= 0) {
             layoutManager?.findViewByPosition(firstVisiblePosition)?.top ?: 0
@@ -5518,10 +5540,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun scrollConsoleToBottom() {
-        val lastPosition = consoleLogAdapter.itemCount - 1
-        if (lastPosition < 0) return
         rvConsoleOutput.post {
-            if (!isFinishing && !isDestroyed &&
+            val lastPosition = consoleLogAdapter.itemCount - 1
+            if (lastPosition >= 0 && consoleFollowTail && !isFinishing && !isDestroyed &&
                 consoleDockController.isExpanded && !hasSelectedConsoleText()
             ) {
                 rvConsoleOutput.scrollToPosition(lastPosition)

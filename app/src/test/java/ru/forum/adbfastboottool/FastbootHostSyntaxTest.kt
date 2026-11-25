@@ -42,6 +42,22 @@ class FastbootHostSyntaxTest {
         )
     }
 
+    @Test fun userspaceFastbootRebootWaitsUntilAfterGlobalWipe() {
+        val reboot = FastbootExecutionStep.Raw("reboot:fastboot")
+        assertEquals(
+            listOf(FastbootExecutionStep.Wipe(), reboot),
+            FastbootHostSyntax.compose(listOf(reboot), true, emptySet(), null),
+        )
+    }
+
+    @Test fun activeSlotIsAppliedBeforeUserspaceRebootWithoutWipe() {
+        val reboot = FastbootExecutionStep.Raw("reboot:fastboot")
+        assertEquals(
+            listOf(FastbootExecutionStep.SetActive("b"), reboot),
+            FastbootHostSyntax.compose(listOf(reboot), false, emptySet(), "b"),
+        )
+    }
+
     @Test fun immediateMutationRunsBeforeGlobalWipeLikeDesktopFastboot() {
         val erase = FastbootExecutionStep.PartitionCommand("erase", "userdata", null)
         assertEquals(
