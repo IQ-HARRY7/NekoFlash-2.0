@@ -1698,6 +1698,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     internal fun submitLocalTerminalCommand(raw: String, command: String, workspace: File?): LocalTerminalAdmission =
         launchLocalTerminalCommand(localTerminalScope) { cancellation ->
             logLocalTerminal("${localShell.prompt()} $raw")
+            val localFastboot = fastbootProtocol
+            val localSession = connectionGeneration.get()
+            val localContext = kotlinx.coroutines.currentCoroutineContext()
+            val checkLocalSession = {
+                localContext.ensureActive()
+                cancellation.check()
+                check(localFastboot === fastbootProtocol && localSession == connectionGeneration.get()) {
+                    "Fastboot session changed while running the local command"
+                }
+            }
             val startedAt = SystemClock.elapsedRealtime()
             var lastProgressAt: Long? = null
             fun elapsed(): String {
@@ -1721,7 +1731,18 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     },
                     confirmOverwrite = ::requestLocalOverwrite,
                     confirmDelete = ::requestLocalDelete,
-                    fastbootCommand = ::executeScriptFastbootCommand,
+                    fastbootCommand = { arguments, directory ->
+                        val proto = localFastboot
+                        if (proto == null || !proto.isConnected) {
+                            FastbootShellBridge.Result(1, listOf("❌ No Fastboot device connected"))
+                        } else try {
+                            executeScriptFastbootCommand(arguments, directory, proto, checkLocalSession)
+                        } catch (_: CancellationException) {
+                            FastbootShellBridge.Result(130, listOf("Fastboot command cancelled"))
+                        } catch (error: Exception) {
+                            FastbootShellBridge.Result(1, listOf(error.message ?: error.javaClass.simpleName))
+                        }
+                    },
                     onShellOutput = ::logLocalTerminal,
                 )
                 when {
