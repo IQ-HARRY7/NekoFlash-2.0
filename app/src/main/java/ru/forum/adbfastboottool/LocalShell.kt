@@ -104,9 +104,7 @@ internal class LocalShell(
 
     fun quickOutput(line: String, help: List<String> = HELP): Output? {
         if (extractShellInvocation(line) != null) return null
-        require(!hasUnsupportedShellSyntax(line)) {
-            "Redirection, command separators, command substitution and backticks are not supported."
-        }
+        if (hasUnsupportedShellSyntax(line)) return null // Route shell expressions to the enabled host shell.
         val words = tokenize(line)
         if (line.contains("&&") || line.contains('|')) return null
         val command = words.firstOrNull()?.value.orEmpty()
@@ -132,7 +130,6 @@ internal class LocalShell(
                 ), deviceBinariesEnabled = deviceBinariesEnabled)
             }
             in COMMANDS, in DEVICE_DIAGNOSTIC_COMMANDS -> null
-            in BLOCKED_EXECUTABLES -> null
             else -> if (deviceBinariesEnabled) null else Output(
                 cwd,
                 listOf("Unknown local command: $command") + help,
@@ -276,8 +273,36 @@ internal class LocalShell(
                     )
                 }
 
-                require(!hasUnsupportedShellSyntax(line)) {
-                    "Redirection, command separators, command substitution and backticks are not supported."
+                val hostLine = line.trim().let { raw ->
+                    if (raw == "local") "" else if (raw.startsWith("local") && raw.getOrNull(5)?.isWhitespace() == true) {
+                        raw.substring(5).trimStart()
+                    } else raw
+                }
+                val firstHostCommand = hostLine.takeWhile { !it.isWhitespace() }
+                val managedCommands = COMMANDS + DEVICE_DIAGNOSTIC_COMMANDS + STATEFUL_COMMANDS +
+                    SHELL_COMMANDS + setOf("echo", "help")
+                if (deviceBinariesEnabled &&
+                    (firstHostCommand !in managedCommands || hasUnsupportedShellSyntax(hostLine))
+                ) {
+                    val activeRoot = workspaceRoot() ?: return@withContext null
+                    val shellResult = runSystemShell(
+                        shellName = "sh",
+                        args = listOf("-c", hostLine),
+                        directory = cwd?.takeIf(File::isDirectory) ?: activeRoot,
+                        fastbootCommand = fastbootCommand,
+                        onOutput = onShellOutput,
+                        checkCancelled = checkCancelled,
+                    )
+                    return@withContext Output(
+                        directory = cwd ?: activeRoot,
+                        lines = shellResult.second,
+                        deviceBinariesEnabled = deviceBinariesEnabled,
+                        exitCode = shellResult.first,
+                        streamedOutput = true,
+                    )
+                }
+                require(!hasUnsupportedShellSyntax(hostLine)) {
+                    "Enable the system shell to run redirection, command separators, substitutions, or external commands."
                 }
 
                 val clauses = splitOutsideQuotes(line, "&&")
@@ -382,12 +407,6 @@ internal class LocalShell(
                 checkCancelled = checkCancelled,
             )
             return CommandResult(shellResult.first, shellResult.second, streamedOutput = true)
-        }
-
-        if (name in BLOCKED_EXECUTABLES) {
-            return CommandResult(126, listOf(
-                "'$name' is blocked. Shell execution, privilege escalation, and app-identity switching are not exposed."
-            ))
         }
 
         if (name == "export") {
@@ -582,8 +601,6 @@ internal class LocalShell(
             check(file.setExecutable(true, true) || file.canExecute()) { "Cannot make terminal helper executable: $file" }
         }
 
-        writeExecutable("su", "#!$shellPath\necho 'NekoFlash: su is blocked in the local script environment' >&2\nexit 126\n")
-        writeExecutable("run-as", "#!$shellPath\necho 'NekoFlash: run-as is blocked in the local script environment' >&2\nexit 126\n")
         writeExecutable("bash", "#!$shellPath\nexec \"$shellPath\" \"\$@\"\n")
 
         val bridge = fastbootCommand?.let { handler ->
@@ -1172,9 +1189,6 @@ esac
         val COMMANDS = setOf("pwd", "ls", "cd", "find", "grep", "cp", "mv", "mkdir", "cat", "rm")
         val STATEFUL_COMMANDS = setOf("cd", "export", "clear")
         val SHELL_COMMANDS = setOf("sh", "bash")
-        val BLOCKED_EXECUTABLES = setOf(
-            "sh", "bash", "mksh", "ash", "dash", "zsh", "ksh", "toybox", "busybox", "su", "run-as",
-        )
         val TOYBOX_DIAGNOSTIC_APPLETS = setOf("id", "uname", "uptime", "df", "ps", "date")
         val SAFE_ID_OPTIONS = setOf("-u", "-g", "-G", "-n", "-r")
         val SAFE_UNAME_OPTIONS = setOf("-a", "-s", "-r", "-m", "-n", "-v", "-p", "-o")
@@ -1188,9 +1202,9 @@ esac
             "sh SCRIPT runs Android /system/bin/sh; bash is a compatibility alias to sh (Bash-only syntax may fail).",
             "Logs and .nekoflash-* staging files can be read but not modified.",
             "System shell is off by default; enable and save: export NEKO_USE_DEVICE_BINARIES=1",
-            "Direct local diagnostics are allowlisted: getprop, id, uname, uptime, whoami, df, ps, date.",
+            "System shell accepts arbitrary host commands and script syntax when enabled; Android enforces permissions.",
             "sh and bash scripts receive Android's system PATH and run with this app's UID, not a root sandbox.",
-            "PATH stubs block bare su/run-as only; absolute paths can bypass them. Never run untrusted scripts.",
+            "su/run-as are delegated to the installed Android binaries when present, with their normal OS authorization.",
         )
     }
 }
