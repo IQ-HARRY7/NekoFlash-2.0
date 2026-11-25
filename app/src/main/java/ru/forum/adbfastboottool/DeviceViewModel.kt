@@ -1455,8 +1455,13 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 else -> return FastbootShellBridge.Result(2, listOf("❌ Unsupported Fastboot option: ${values[index]}"))
             }
         }
-        val command = setActiveOption?.let { listOf("set_active", it) } ?: values.drop(index).ifEmpty {
-            if (wipe) listOf("wipe") else emptyList()
+        val commandTokens = values.drop(index)
+        val command = commandTokens.ifEmpty {
+            when {
+                setActiveRequested -> listOf("set_active") + listOfNotNull(setActiveOption ?: slot)
+                wipe -> listOf("wipe")
+                else -> emptyList()
+            }
         }
         if (command.isEmpty()) return FastbootShellBridge.Result(2, listOf("❌ fastboot: missing command"))
         val verb = command[0].lowercase(Locale.US)
@@ -1501,7 +1506,9 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     }
                     listOf(FastbootExecutionStep.Raw("getvar:$name"))
                 }
-                "set_active", "--set-active" -> {
+                "set_active", "--set-active" -> if (setActiveRequested && commandTokens.isEmpty()) {
+                    emptyList() // FastbootHostSyntax.compose adds the requested slot once.
+                } else {
                     val active = command.getOrNull(1) ?: return FastbootShellBridge.Result(2, listOf("❌ set_active needs SLOT"))
                     listOf(FastbootExecutionStep.SetActive(active.removePrefix("_").lowercase(Locale.US)))
                 }
@@ -1649,12 +1656,10 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     else FastbootShellBridge.Result(1, listOf("❌ erase $partition failed"))
                 }
                 "set_active", "--set-active" -> {
-                    val activeSlot = command.getOrNull(1)?.removePrefix("_")?.lowercase(Locale.US)
-                        ?: return FastbootShellBridge.Result(2, listOf("❌ set_active requires a or b"))
-                    if (activeSlot !in setOf("a", "b")) return FastbootShellBridge.Result(2, listOf("❌ Invalid active slot: $activeSlot"))
+                    val active = command.getOrNull(1)?.removePrefix("_")?.lowercase(Locale.US)
                     if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
-                    if (proto.sendCommand("set_active:$activeSlot")) FastbootShellBridge.Result(0, listOf("✅ active slot set to $activeSlot"))
-                    else FastbootShellBridge.Result(1, listOf("❌ set_active:$activeSlot failed"))
+                    executeFastbootHostPlan(proto, listOf(FastbootExecutionStep.SetActive(active)), 0, checkCancelled) { error(it) }
+                    FastbootShellBridge.Result(0, listOf("✅ active slot updated through shared Fastboot host plan"))
                 }
                 "reboot", "reboot-bootloader", "reboot-edl", "continue" -> {
                     val wire = when {
