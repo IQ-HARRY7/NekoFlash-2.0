@@ -1493,7 +1493,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     val wire = when (command) {
                         listOf("reboot") -> "reboot"
                         listOf("reboot", "bootloader") -> "reboot-bootloader"
-                        listOf("reboot", "fastboot") -> "reboot-fastboot"
+                        listOf("reboot", "fastboot") -> "reboot:fastboot"
                         else -> return FastbootShellBridge.Result(2, listOf("❌ Invalid reboot arguments"))
                     }
                     listOf(FastbootExecutionStep.Raw(wire))
@@ -1609,16 +1609,15 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     val imagePath = command.getOrNull(2) ?: return FastbootShellBridge.Result(2, listOf("❌ flash requires PARTITION FILE"))
                     if (command.size != 3) return FastbootShellBridge.Result(2, listOf("❌ Unsupported extra arguments for fastboot flash"))
                     val requestedSlot = slot?.removePrefix("_")?.lowercase(Locale.US)
-                    if (requestedSlot != null && requestedSlot !in setOf("a", "b", "all", "other")) {
+                    if (requestedSlot != null && requestedSlot !in setOf("all", "other") &&
+                        !(requestedSlot.length == 1 && requestedSlot[0] in 'a'..'z')) {
                         return FastbootShellBridge.Result(2, listOf("❌ Invalid --slot value: $requestedSlot"))
                     }
                     val image = File(imagePath).let { if (it.isAbsolute) it else File(workingDirectory, imagePath) }.canonicalFile
                     if (!image.isFile || !image.canRead()) return FastbootShellBridge.Result(1, listOf("❌ Image file is missing or unreadable: ${image.path}"))
                     if (!beginScriptOperation()) return FastbootShellBridge.Result(1, listOf("❌ Fastboot session is not ready"))
                     val explicitTarget = FlashOperationDraftPolicy.isExplicitSlotTarget(partition)
-                    if (explicitTarget && requestedSlot != null && !partition.endsWith("_$requestedSlot")) {
-                        return FastbootShellBridge.Result(2, listOf("❌ Partition $partition conflicts with --slot=$requestedSlot"))
-                    }
+                    // Exact partition names win over --slot, consistent with Quick/Mass Flash.
                     val targetPartitions = if (explicitTarget) listOf(partition)
                     else proto.resolveSlotPartitionTargets(partition, requestedSlot)
                         ?: return FastbootShellBridge.Result(1, listOf("❌ Cannot resolve Fastboot targets for $partition"))
